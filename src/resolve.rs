@@ -3,6 +3,7 @@
 //! so clients never evaluate an expression or apply a default.
 
 mod chart;
+mod geometry;
 mod tree;
 mod value;
 

@@ -37,8 +37,12 @@ nodes across resolves to animate them.
 - The items of a `repeat` add `:` and the item's key to the `repeat`'s own segment: the key the
   `repeat` gives the item, else the key its child sets, else the item's index. A chess piece is
   `0/1/2:wK`, and nested `repeat`s compose, as in `0/0:To do/1:c1`.
-- Keys from the template have `/`, `:` and `#` replaced by `_`. When a segment repeats among one
-  parent's children, the later ones get `#2`, `#3` and so on, so keys are unique.
+- Keys from the template have `/`, `:` and `#` replaced by `_`, and a number key is written as
+  the template's `string()` writes it. When a segment repeats among one parent's children, the
+  later ones get `#2`, `#3` and so on, so keys are unique.
+- The shapes a template's `use` draws take the `use`'s key plus `/` and each shape's own key or
+  its index in the symbol, as in `0/1/2:wK/0`. A template's `connector` becomes paths: its line
+  keyed `/0` under the connector's key, its arrowhead at `to` keyed `/1` and at `from` `/2`.
 
 ### Containers
 
@@ -72,8 +76,13 @@ A `frame`'s `child` is its one flow node, or `null` when it has none. Every chil
 | `path`    | `a11y`, `d`, `fill`, `stroke`, `stroke_width`, `opacity`, `dash`, `cap`, `join`                              |
 
 Coordinates and sizes of shapes are in view-box units. Shapes drawn from a symbol also carry
-`transform`, `[a, b, c, d, e, f]` in SVG matrix order, after `join`. `d` uses only absolute `M`,
-`L`, `C` and `Z`.
+`transform`, `[a, b, c, d, e, f]` in SVG matrix order, after `join`: it maps the shape's own
+coordinates, stroke width and dash included, into the canvas, as SVG's `transform` attribute
+does. `d` uses only absolute `M`, `L`, `C` and `Z`.
+
+A connector arrives as a `path` for its line, stopping at each arrowhead's base, and a closed
+`path` for each arrowhead, filled in the line's stroke color. The line carries the connector's
+`a11y`, and the first shape a `use` draws carries the `use`'s unless it has its own.
 
 ## Values
 

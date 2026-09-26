@@ -27,6 +27,9 @@ pub enum ValueKind {
     Bool,
     /// A string.
     String,
+    /// A node's key, or the frame key a connector names: a string, or a number standing for the
+    /// text `string()` writes for it.
+    Key,
     /// The name of a `repeat` binding: letters, digits and underscores, not starting with a
     /// digit, and never an expression, since expressions refer to it by name.
     Identifier,
@@ -63,6 +66,7 @@ impl ValueKind {
             ValueKind::Number => "expected a number",
             ValueKind::Bool => "expected true or false",
             ValueKind::String => "expected a string",
+            ValueKind::Key => "expected a string or a number",
             ValueKind::Identifier => "expected a name of letters, digits and underscores",
             ValueKind::Color => "expected a color",
             ValueKind::Paint => "expected a color or none",
@@ -102,7 +106,7 @@ pub enum DefaultValue {
 
 /// The properties every node takes before its own.
 pub const COMMON_PROPERTIES: &[PropSpec] = &[
-    spec("key", ValueKind::String, DefaultValue::Null),
+    spec("key", ValueKind::Key, DefaultValue::Null),
     spec("visible", ValueKind::Bool, DefaultValue::Bool(true)),
     spec("a11y", ValueKind::String, DefaultValue::Null),
 ];
@@ -306,8 +310,8 @@ const USE: &[PropSpec] = &[
 ];
 
 const CONNECTOR: &[PropSpec] = &[
-    spec("from", ValueKind::String, DefaultValue::Null),
-    spec("to", ValueKind::String, DefaultValue::Null),
+    spec("from", ValueKind::Key, DefaultValue::Null),
+    spec("to", ValueKind::Key, DefaultValue::Null),
     spec(
         "route",
         ValueKind::Enum(ROUTES),

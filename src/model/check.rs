@@ -19,6 +19,7 @@ pub(crate) fn accepts(kind: ValueKind, value: &Value, in_symbol: bool) -> bool {
         ValueKind::Number => matches!(value, Value::Number(_)),
         ValueKind::Bool => matches!(value, Value::Bool(_)),
         ValueKind::String | ValueKind::PathData => matches!(value, Value::String(_)),
+        ValueKind::Key => matches!(value, Value::String(_) | Value::Number(_)),
         ValueKind::Identifier => matches!(value, Value::String(name) if is_identifier(name)),
         ValueKind::Color => is_color(value),
         ValueKind::Paint => {

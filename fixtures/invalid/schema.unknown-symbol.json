@@ -1,0 +1,1 @@
+{"tgw": 1, "template": {"spec": 1, "id": "tg.test", "version": 1, "defs": {"symbols": {"dot": {"view_box": [2, 2], "shapes": [{"type": "ellipse", "cx": 1, "cy": 1, "rx": 1, "ry": 1}]}}}, "root": {"type": "canvas", "view_box": [4, 4], "children": [{"type": "use", "symbol": "dash"}]}}}

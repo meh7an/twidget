@@ -29,11 +29,13 @@ pub(super) fn raw<'n>(
 }
 
 /// Every property a node writes out, in property-table order: `a11y`, then the type's own.
-/// `key` and `visible` shape the tree instead of being written.
+/// `key` and `visible` shape the tree instead of being written. A symbol's shapes keep
+/// `current`, which the `use` drawing them replaces.
 pub(super) fn properties(
     evaluator: &mut Evaluator<'_>,
     node: &Node,
     bindings: Bindings<'_>,
+    in_symbol: bool,
 ) -> Result<Vec<(&'static str, Value)>> {
     let mut resolved: Vec<(&'static str, Value)> = Vec::new();
     for spec in COMMON_PROPERTIES.iter().chain(node.kind.properties()) {
@@ -41,7 +43,7 @@ pub(super) fn properties(
             continue;
         }
         let value = match raw(evaluator, node, spec.name, bindings)? {
-            Some(value) if check::accepts(spec.kind, &value, false) => value.into_owned(),
+            Some(value) if check::accepts(spec.kind, &value, in_symbol) => value.into_owned(),
             Some(_) | None => default(spec.default),
         };
         let value = written(spec.kind, value, &resolved);
@@ -76,6 +78,7 @@ fn written(kind: ValueKind, value: Value, earlier: &[(&str, Value)]) -> Value {
         ValueKind::Number
         | ValueKind::Bool
         | ValueKind::String
+        | ValueKind::Key
         | ValueKind::Identifier
         | ValueKind::Color
         | ValueKind::Enum(_)

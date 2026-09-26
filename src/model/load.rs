@@ -84,6 +84,7 @@ fn template(value: &Value, loc: Loc) -> Result<Template> {
     let version = template_version(fields.get("version"), loc.key("version"))?;
     let mut loader = Loader::default();
     let symbols = loader.symbols(fields.get("defs"), loc.key("defs"))?;
+    loader.symbol_names = symbols.iter().map(|symbol| symbol.name.clone()).collect();
     let root_loc = loc.key("root");
     let Some(root) = fields.get("root") else {
         return Err(root_loc.error("missing field"));
@@ -357,11 +358,12 @@ impl Context {
     }
 }
 
-/// Counts toward the budgets that span a whole template.
+/// Counts toward the budgets that span a whole template, and knows its symbols' names.
 #[derive(Default)]
 struct Loader {
     nodes: usize,
     path_commands: usize,
+    symbol_names: Vec<String>,
 }
 
 impl Loader {
@@ -443,6 +445,16 @@ impl Loader {
             names
         };
         let properties = self.properties(fields, kind, loc, context, names, inner)?;
+        // A literal name is known now, so a typo fails here; a computed one is checked per resolve.
+        if let Some(Property {
+            value: PropValue::Literal(Value::String(symbol)),
+            ..
+        }) = properties.iter().find(|property| property.name == "symbol")
+        {
+            if !self.symbol_names.contains(symbol) {
+                return Err(loc.key("symbol").error("unknown symbol"));
+            }
+        }
         let children_loc = loc.key("children");
         let child_loc = loc.key("child");
         let (children, child) = match kind {
@@ -581,6 +593,7 @@ impl Loader {
             ValueKind::Number
             | ValueKind::Bool
             | ValueKind::String
+            | ValueKind::Key
             | ValueKind::Identifier
             | ValueKind::Color
             | ValueKind::Paint
