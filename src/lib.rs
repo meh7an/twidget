@@ -15,6 +15,8 @@
 // and `alloc` paths so that every use of `std` stays visible: the C API and the CLI.
 extern crate alloc;
 
+pub mod budget;
 mod error;
+pub mod json;
 
 pub use error::{Error, Result, Status};
