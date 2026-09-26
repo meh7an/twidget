@@ -1,0 +1,45 @@
+[package]
+name = "twidget"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+name = "twidget"
+crate-type = ["rlib", "cdylib"]
+
+[[bin]]
+name = "twidget-cli"
+path = "src/cli/main.rs"
+required-features = ["cli"]
+
+[features]
+default = ["std"]
+# The crate always links std: a no_std cdylib needs its own allocator and panic handler, which
+# would take unsafe code or a dependency, and the C API needs unwinding for catch_unwind. The
+# feature keeps tlottie's feature set and marks what depends on std.
+std = []
+c-api = ["std"]
+wasm = []
+cli = ["std"]
+
+[lints.rust]
+unsafe_code = "deny"
+unsafe_op_in_unsafe_fn = "deny"
+
+[lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+todo = "deny"
+unimplemented = "deny"
+indexing_slicing = "deny"
+string_slice = "deny"
+fallible_impl_from = "deny"
+unreachable = "deny"
+
+[profile.release]
+opt-level = 3
+debug = false
+lto = "fat"
+codegen-units = 1
