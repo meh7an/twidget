@@ -16,6 +16,8 @@ extern "C" {
  * The library owns no threads, clocks, callbacks or I/O: time and theme
  * arrive through TWidgetEnv on every resolve. Every string is UTF-8, passed
  * as pointer plus length, and borrowed only for the duration of the call.
+ * A NULL input pointer with length 0 is an empty input, and a NULL output
+ * buffer with capacity 0 asks for the required size.
  *
  * Templates are immutable and may be shared across threads. An instance must
  * not be used from two threads at once.
@@ -46,12 +48,14 @@ enum TwidgetStatus {
   TWIDGET_ERROR_TEMPLATE_MISMATCH = -8,
   /* The envelope carries an inline template, so it has no reference to read. */
   TWIDGET_ERROR_NOT_FOUND = -9,
+  /* A defect inside the library was contained; the call had no effect. */
+  TWIDGET_ERROR_INTERNAL = -10,
 };
 
 /*
  * Inputs a resolve may read besides the widget itself. Set struct_size to
- * sizeof(TWidgetEnv) so later versions can append fields without breaking
- * older callers.
+ * sizeof(TWidgetEnv); smaller values are rejected, and later versions can
+ * append fields without breaking older callers.
  */
 typedef struct TWidgetEnv {
   uint32_t struct_size;
@@ -97,8 +101,9 @@ void twidget_template_drop(TWidgetTemplate *tpl);
 
 /*
  * Binds an envelope to its template. Pass NULL as bundled for an inline
- * template, or the template matching the envelope's template_ref. Returns NULL
- * on failure; status_out may be NULL.
+ * template, or the template matching the envelope's template_ref; passing a
+ * template with an inline envelope fails with TWIDGET_ERROR_TEMPLATE_MISMATCH.
+ * Returns NULL on failure; status_out may be NULL.
  */
 TWidgetInstance *twidget_instance_new(
     const uint8_t *envelope_ptr,
