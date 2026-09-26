@@ -1,9 +1,9 @@
 # Live widgets spec v0
 
-As of 2026-09-26, revision v0.3. This repository copy leads the original design doc and is the
+As of 2026-09-26, revision v0.4. This repository copy leads the original design doc and is the
 source of truth for implementation. v0.1 adds the Implementation clarifications section at the end,
-v0.2 settles the defaults, required properties and paint values that section left open, and v0.3
-settles the expression edge cases it left open.
+v0.2 settles the defaults, required properties and paint values that section left open, v0.3
+settles the expression edge cases it left open, and v0.4 settles the resolver's.
 
 ## Overview
 
@@ -756,6 +756,8 @@ than the sections above, it governs, and each subsection names the milestone tha
   `child`; a template missing one fails with `TWIDGET_ERROR_SCHEMA`. A `frame` may leave out its
   `child`. A literal view-box dimension outside 1 to 10,000 fails with `TWIDGET_ERROR_BUDGET`, as
   the budget table says.
+- The root and a frame's `child` hold exactly one node, so a `repeat` in either place fails the
+  load with `TWIDGET_ERROR_SCHEMA`; a `repeat` belongs among a container's `children`.
 
 ### Expressions (M2.1)
 
@@ -790,6 +792,8 @@ than the sections above, it governs, and each subsection names the milestone tha
   of `.name` and `[index]` steps (`state.lanes[0].title`), each run taken as a whole. Literals and
   names are at level 0; 32 levels pass, and 33 fail with `TWIDGET_ERROR_BUDGET`.
 - Fuel costs one step per evaluated syntax node, plus one per list element or character produced.
+- A string an operator or function builds past the 8 KB string budget is a failing expression and
+  yields `null`, since one bad value never fails a resolve.
 
 ### Resolver (M2.2 to M2.4)
 
@@ -814,11 +818,20 @@ than the sections above, it governs, and each subsection names the milestone tha
   follow `accent`, `palette_4`, `palette_2`, `palette_3`, `palette_5`, `palette_7`, `palette_1`,
   repeating, and non-numeric values become gaps.
 - The crate writes an explicit y range: data minimum to maximum for `line` (widened by 1 on each
-  side when flat), the same range stretched to include 0 for `bar`, and 0 to 1 without data.
+  side when flat), the same range stretched to include 0 for `bar`, and 0 to 1 without data. A
+  `y_min` or `y_max` the template sets replaces that end, unless the range would then end at or
+  below its start, in which case the computed range stands.
 - Keys are full paths. The root is `0`, a child's segment is its index among its parent's template
   children, and each `repeat` item adds `:` plus its explicit key or its item index, so a chess
   piece is `0/1/2:wK`. Explicit keys have `/`, `:` and `#` replaced by `_`, and repeated keys
   within one `repeat` get `#2`, `#3` and so on in order.
+- A node's own `key` replaces its index segment, sanitized the same way, and the root's replaces
+  `0`. Inside a `repeat`, an item's key is the `repeat`'s `key`, else its child's own `key`, else
+  its index. A segment that repeats among one parent's children gets `#2`, `#3` and so on in
+  order, as repeated item keys do.
+- A `repeat` evaluates its `key` once per item, with the item's names in scope; its `each`,
+  `visible` and `a11y` see only the names around it. `visible` false drops every item, and its
+  `a11y` is ignored, since a `repeat` resolves to no node of its own.
 - The crate validates `entities` against the resolved text in UTF-16 code units and clips them, so
   clients receive safe offsets.
 - A `scroll_x` child whose `width` resolves to `null` is dropped with its subtree. A `repeat` whose
