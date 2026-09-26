@@ -23,6 +23,17 @@ pub struct Env {
     pub rtl: bool,
 }
 
+impl Env {
+    /// The fixed environment of tests, goldens and the CLI's defaults: 2026-09-26 09:41:27.123
+    /// UTC seen from UTC+03:30, in the light theme, left to right.
+    pub const TEST: Env = Env {
+        now_ms: 1_790_415_687_123,
+        tz_offset_minutes: 210,
+        dark: false,
+        rtl: false,
+    };
+}
+
 /// The values the enclosing `repeat`s bind, innermost first. The default binds nothing.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Bindings<'v> {

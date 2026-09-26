@@ -316,6 +316,24 @@ fn test_functions_normal_boundary_and_misuse() {
 }
 
 #[test]
+fn test_strings_built_past_the_string_budget_are_null() {
+    let limit = budget::STRING_LENGTH.limit;
+    let state = format!(
+        "{{\"s\": \"{}\", \"p\": \"{}\"}}",
+        "a".repeat(limit - 1),
+        "a".repeat(limit / 2 + 1)
+    );
+    let env = env(0, 0);
+    assert_eq!(
+        eval_in(&state, &env, "len(state.s + 'b')"),
+        limit.to_string()
+    );
+    assert_eq!(eval_in(&state, &env, "state.s + 'bc'"), "null");
+    // Each `a` token writes two letters, so this pattern writes more than the budget allows.
+    assert_eq!(eval_in(&state, &env, "format_time(0, state.p)"), "null");
+}
+
+#[test]
 fn test_range_past_the_repeat_budget_fails_the_resolve() {
     let empty = Object::default();
     let env = env(0, 0);

@@ -2,6 +2,7 @@
 //! evaluated. Loading enforces the schema, the format versions and the load-time budgets; the
 //! resolver fills in defaults and evaluates expressions later.
 
+pub(crate) mod check;
 mod color;
 mod load;
 mod table;

@@ -21,5 +21,6 @@ pub mod expr;
 pub mod json;
 pub mod model;
 pub mod path;
+pub mod resolve;
 
 pub use error::{Error, Result, Status};

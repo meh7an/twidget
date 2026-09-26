@@ -8,7 +8,7 @@ use alloc::vec::Vec;
 
 use super::table::{DefaultValue, ValueKind, COMMON_PROPERTIES, INDEX_NAME, ITEM_NAME};
 use super::{
-    color, Envelope, Node, NodeKind, PropValue, Property, Symbol, Template, TemplateRef,
+    check, Envelope, Node, NodeKind, PropValue, Property, Symbol, Template, TemplateRef,
     TemplateSource, Tick, Width,
 };
 use crate::budget;
@@ -19,9 +19,6 @@ use crate::{Error, Result};
 
 /// The only envelope and template format version v0 reads.
 const FORMAT_VERSION: f64 = 1.0;
-
-const VIEW_BOX_MIN: f64 = budget::VIEW_BOX_MIN as f64;
-const VIEW_BOX_MAX: f64 = budget::VIEW_BOX_DIMENSIONS.limit as f64;
 
 pub(super) fn envelope(document: &Value) -> Result<Envelope> {
     let loc = Loc::Root("envelope");
@@ -92,6 +89,7 @@ fn template(value: &Value, loc: Loc) -> Result<Template> {
         return Err(root_loc.error("missing field"));
     };
     let root = loader.node(root, root_loc, Context::Flow, Names::default())?;
+    single(&root, root_loc)?;
     Ok(Template {
         id,
         version,
@@ -291,71 +289,28 @@ fn is_whole(number: f64) -> bool {
     number.fract() == 0.0
 }
 
+/// A view box's sides: a shape other than two numbers breaks the schema, and a size outside 1 to
+/// 10,000 breaks the budget.
 fn view_box(value: &Value, loc: Loc) -> Result<[f64; 2]> {
-    let Value::Array(sides) = value else {
+    let Some(sides) = check::view_box(value) else {
         return Err(loc.error(ValueKind::ViewBox.expectation()));
     };
-    let [Value::Number(w), Value::Number(h)] = sides.as_slice() else {
-        return Err(loc.error(ValueKind::ViewBox.expectation()));
-    };
-    let allowed = VIEW_BOX_MIN..=VIEW_BOX_MAX;
-    if allowed.contains(w) && allowed.contains(h) {
-        Ok([*w, *h])
+    if sides
+        .iter()
+        .all(|side| check::VIEW_BOX_SIDES.contains(side))
+    {
+        Ok(sides)
     } else {
         Err(budget::VIEW_BOX_DIMENSIONS.exceeded())
     }
 }
 
-fn is_identifier(name: &str) -> bool {
-    let mut bytes = name.bytes();
-    bytes
-        .next()
-        .is_some_and(|first| first.is_ascii_alphabetic() || first == b'_')
-        && bytes.all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
-}
-
-fn is_padding(value: &Value) -> bool {
-    matches!(value, Value::Number(_))
-        || matches!(value, Value::Array(sides)
-            if matches!(sides.len(), 2 | 4) && sides.iter().all(|side| matches!(side, Value::Number(_))))
-}
-
-fn is_border(value: &Value) -> bool {
-    let Value::Object(border) = value else {
-        return false;
-    };
-    let color_ok = border.get("color").is_none_or(is_color);
-    color_ok && matches!(border.get("width"), None | Some(Value::Number(_)))
-}
-
-fn is_color(value: &Value) -> bool {
-    matches!(value, Value::String(text) if color::is_valid(text, false, false))
-}
-
-fn is_entity(value: &Value) -> bool {
-    let Value::Object(entity) = value else {
-        return false;
-    };
-    matches!(entity.get("type"), Some(Value::String(_)))
-        && matches!(entity.get("offset"), Some(Value::Number(_)))
-        && matches!(entity.get("length"), Some(Value::Number(_)))
-}
-
-fn is_label(value: &Value) -> bool {
-    matches!(value, Value::String(_) | Value::Number(_))
-}
-
-fn is_series(value: &Value) -> bool {
-    let Value::Object(series) = value else {
-        return false;
-    };
-    matches!(series.get("name"), None | Some(Value::String(_)))
-        && matches!(series.get("values"), None | Some(Value::Array(_)))
-        && series.get("color").is_none_or(is_color)
-}
-
-fn is_list_of(value: &Value, item: fn(&Value) -> bool) -> bool {
-    matches!(value, Value::Array(items) if items.iter().all(item))
+/// Fails for a `repeat` where exactly one node must stand: the root, or a frame's `child`.
+fn single(node: &Node, loc: Loc) -> Result<()> {
+    if node.kind == NodeKind::Repeat {
+        return Err(loc.error("expected one node, not a repeat"));
+    }
+    Ok(())
 }
 
 /// Which node types a position in the tree accepts.
@@ -500,15 +455,11 @@ impl Loader {
                 None,
             ),
             NodeKind::Frame => match fields.get("child") {
-                Some(child) => (
-                    Vec::new(),
-                    Some(Box::new(self.node(
-                        child,
-                        child_loc,
-                        Context::Flow,
-                        names,
-                    )?)),
-                ),
+                Some(child) => {
+                    let child = self.node(child, child_loc, Context::Flow, names)?;
+                    single(&child, child_loc)?;
+                    (Vec::new(), Some(Box::new(child)))
+                }
                 None => (Vec::new(), None),
             },
             NodeKind::Repeat => {
@@ -624,32 +575,29 @@ impl Loader {
         loc: Loc,
         context: Context,
     ) -> Result<()> {
-        let valid = match kind {
-            ValueKind::Number => matches!(value, Value::Number(_)),
-            ValueKind::Bool => matches!(value, Value::Bool(_)),
-            ValueKind::String => matches!(value, Value::String(_)),
-            ValueKind::Identifier => matches!(value, Value::String(name) if is_identifier(name)),
-            ValueKind::Color => is_color(value),
-            ValueKind::Paint => matches!(value, Value::String(text)
-                if color::is_valid(text, context == Context::Symbol, true)),
-            ValueKind::Enum(options) => {
-                matches!(value, Value::String(text) if options.contains(&text.as_str()))
+        match kind {
+            ValueKind::ViewBox => view_box(value, loc).map(|_| ()),
+            ValueKind::PathData => self.path_data(value, loc),
+            ValueKind::Number
+            | ValueKind::Bool
+            | ValueKind::String
+            | ValueKind::Identifier
+            | ValueKind::Color
+            | ValueKind::Paint
+            | ValueKind::Enum(_)
+            | ValueKind::Padding
+            | ValueKind::Border
+            | ValueKind::Dash
+            | ValueKind::Entities
+            | ValueKind::Labels
+            | ValueKind::Series
+            | ValueKind::Any => {
+                if check::accepts(kind, value, context == Context::Symbol) {
+                    Ok(())
+                } else {
+                    Err(loc.error(kind.expectation()))
+                }
             }
-            ValueKind::Padding => is_padding(value),
-            ValueKind::Border => is_border(value),
-            ValueKind::Dash => matches!(value, Value::Array(sides)
-                if matches!(sides.as_slice(), [Value::Number(_), Value::Number(_)])),
-            ValueKind::ViewBox => return view_box(value, loc).map(|_| ()),
-            ValueKind::Entities => is_list_of(value, is_entity),
-            ValueKind::Labels => is_list_of(value, is_label),
-            ValueKind::Series => is_list_of(value, is_series),
-            ValueKind::PathData => return self.path_data(value, loc),
-            ValueKind::Any => true,
-        };
-        if valid {
-            Ok(())
-        } else {
-            Err(loc.error(kind.expectation()))
         }
     }
 

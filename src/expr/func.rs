@@ -66,8 +66,12 @@ pub(super) fn text(value: &Value) -> Option<Cow<'_, str>> {
     }
 }
 
-/// Text an operation produced, spending a step per character.
+/// Text an operation produced, spending a step per character, or `null` when it is longer than
+/// the string budget, which makes it a failing expression rather than a failed resolve.
 pub(super) fn produced(text: String, meter: &mut Meter) -> Result<Value> {
+    if text.len() > budget::STRING_LENGTH.limit {
+        return Ok(Value::Null);
+    }
     meter.spend(text.chars().count())?;
     Ok(Value::String(text))
 }
