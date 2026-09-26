@@ -1,7 +1,8 @@
 # Live widgets spec v0
 
-As of 2026-09-26, revision v0.1. This repository copy leads the original design doc and is the
-source of truth for implementation. v0.1 adds the Implementation clarifications section at the end.
+As of 2026-09-26, revision v0.2. This repository copy leads the original design doc and is the
+source of truth for implementation. v0.1 adds the Implementation clarifications section at the end,
+and v0.2 settles the defaults, required properties and paint values that section left open.
 
 ## Overview
 
@@ -720,6 +721,8 @@ than the sections above, it governs, and each subsection names the milestone tha
 - With it, the goldens become 32 resolved trees (8 fixtures, light and dark, LTR and RTL), 24 frame
   files (8 fixtures at widths 240, 320 and 480) and 8 RTL frame files at 320.
 - A `frame` holds its single flow node in `child`, as `repeat` does.
+- The `chart` fixture puts a `divider` between its title and its chart, so every node type appears
+  in at least one fixture.
 
 ### JSON (M1.1)
 
@@ -743,9 +746,15 @@ than the sections above, it governs, and each subsection names the milestone tha
   two. The 20,000 limit applies to literal paths at load and again to normalized paths at resolve.
 - Every node object in the template counts toward the 2,000 nodes, symbol shapes and fallback
   subtrees included.
-- A template `id` is 3 to 64 bytes of `a-z`, `0-9`, `.`, `_` and `-`, starts and ends with a
-  letter or digit, contains at least one dot and never `..`. Apps turn it into a resource file
-  name, so this is a path-safety rule.
+- A template `id`, and the `id` in an envelope's `template_ref`, is 3 to 64 bytes of `a-z`,
+  `0-9`, `.`, `_` and `-`, starts and ends with a letter or digit, contains at least one dot and
+  never `..`. Apps turn it into a resource file name, so this is a path-safety rule.
+- `fill`, `stroke` and `background` also accept `none`, which paints nothing. It takes no
+  `@alpha`, and it resolves to `null`.
+- A `canvas` and each symbol need a `view_box`, a `use` needs a `symbol` and a `repeat` needs a
+  `child`; a template missing one fails with `TWIDGET_ERROR_SCHEMA`. A `frame` may leave out its
+  `child`. A literal view-box dimension outside 1 to 10,000 fails with `TWIDGET_ERROR_BUDGET`, as
+  the budget table says.
 
 ### Expressions (M2.1)
 
@@ -785,6 +794,12 @@ than the sections above, it governs, and each subsection names the milestone tha
   false, no entities.
 - Box defaults: `gap` 0, `padding` 0, `align` `start`, no background, `radius` 0, no border.
   `text_field.lines` defaults to 1.
+- Other defaults: `use.color` is `text` and `divider.color` is `divider`; a `border` missing its
+  `color` or `width` takes `divider` or 1; `text.text` and the `text_field` strings are empty;
+  chart `labels` and `series` are empty, and so are a series' missing `name` and `values`; `a11y`
+  is `null`. Every coordinate and size (`x`, `y`, `w`, `h`, `rx`, `ry`, `cx`, `cy`, `x1`, `y1`,
+  `x2`, `y2`) is 0, so a shape without a size paints nothing, as in SVG, and a missing `d` is
+  empty.
 - Chart defaults: `kind` `line`, and `legend` when there are two or more series. Series colors
   follow `accent`, `palette_4`, `palette_2`, `palette_3`, `palette_5`, `palette_7`, `palette_1`,
   repeating, and non-numeric values become gaps.
@@ -797,7 +812,8 @@ than the sections above, it governs, and each subsection names the milestone tha
 - The crate validates `entities` against the resolved text in UTF-16 code units and clips them, so
   clients receive safe offsets.
 - A `scroll_x` child whose `width` resolves to `null` is dropped with its subtree. A `repeat` whose
-  `each` is not a list produces no children.
+  `each` is not a list produces no children. A `canvas` whose `view_box` resolves to anything but
+  two numbers from 1 to 10,000 is dropped with its subtree.
 - `use` fits the symbol's view box into its box, keeping the aspect ratio and centered. An unknown
   literal symbol name fails the load with `TWIDGET_ERROR_SCHEMA`, and one produced by an
   expression drops the node.

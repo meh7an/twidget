@@ -13,6 +13,7 @@
       "radius": 12,
       "children": [
         { "type": "text", "style": "title", "text": { "=": "state.title" } },
+        { "type": "divider" },
         {
           "type": "chart",
           "kind": "line",
