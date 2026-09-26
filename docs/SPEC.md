@@ -1,9 +1,9 @@
 # Live widgets spec v0
 
-As of 2026-09-26, revision v0.4. This repository copy leads the original design doc and is the
+As of 2026-09-26, revision v0.5. This repository copy leads the original design doc and is the
 source of truth for implementation. v0.1 adds the Implementation clarifications section at the end,
 v0.2 settles the defaults, required properties and paint values that section left open, v0.3
-settles the expression edge cases it left open, and v0.4 settles the resolver's.
+settles the expression edge cases it left open, and v0.4 and v0.5 settle the resolver's.
 
 ## Overview
 
@@ -800,7 +800,7 @@ than the sections above, it governs, and each subsection names the milestone tha
 - Resolved nodes list `type`, then `key`, then properties in the order of the M1.2 property
   tables, under the template's property names. Values only layout can settle are `null`: chart
   `height` (0.6 × W), an unset `width`, unlimited `max_lines`, and a missing fill or stroke. The
-  crate documents this schema in `docs/RESOLVED.md`, which joins the contract once approved.
+  crate documents this schema in `docs/RESOLVED.md`, part of the contract since v0.5.
 - Shape defaults: `fill` is `text` on `rect`, `ellipse` and `path`, and absent on `line`; `stroke`
   is absent except on `line`, where it is `text`; `stroke_width` 1, `opacity` 1, `cap` `butt`,
   `join` `miter`, no dash.
@@ -829,6 +829,8 @@ than the sections above, it governs, and each subsection names the milestone tha
   `0`. Inside a `repeat`, an item's key is the `repeat`'s `key`, else its child's own `key`, else
   its index. A segment that repeats among one parent's children gets `#2`, `#3` and so on in
   order, as repeated item keys do.
+- A key, or a connector's `from` or `to`, may also be a number, which stands for the text
+  `string()` writes for it.
 - A `repeat` evaluates its `key` once per item, with the item's names in scope; its `each`,
   `visible` and `a11y` see only the names around it. `visible` false drops every item, and its
   `a11y` is ignored, since a `repeat` resolves to no node of its own.
@@ -840,6 +842,8 @@ than the sections above, it governs, and each subsection names the milestone tha
 - `use` fits the symbol's view box into its box, keeping the aspect ratio and centered. An unknown
   literal symbol name fails the load with `TWIDGET_ERROR_SCHEMA`, and one produced by an
   expression drops the node.
+- A `use`'s shapes take its key plus `/` and each shape's own key or its index in the symbol, and
+  the first of them takes the `use`'s `a11y` unless it has its own.
 - `straight` connectors join the two frames' centers, clipped at each frame's edge. `orthogonal`
   connectors leave and enter through the facing edge midpoints along the dominant axis, bending
   twice at the halfway line, and fall back to `straight` when the facing edges overlap.
@@ -847,6 +851,13 @@ than the sections above, it governs, and each subsection names the milestone tha
   stroke color. Connector defaults: `route` `straight`, `arrow` `end`, `stroke` `text_secondary`,
   `stroke_width` 1.5. A connector whose `from` or `to` matches no frame, or whose clipped segment
   has no length, is dropped.
+- A connector's `from` and `to` name frames of the same canvas by the key the template gave them,
+  the `repeat`'s item key or the frame's own `key`, both sides sanitized as keys are; when two
+  frames share a key, the first drawn wins.
+- A connector resolves to its line, keyed with `/0` after its own key, then an arrowhead at `to`
+  keyed `/1` and one at `from` keyed `/2`, as `arrow` asks. The line takes the connector's
+  `a11y` and stops at each arrowhead's base. An end segment shorter than its arrowhead is left
+  out, and a line with no segment left is left out entirely.
 - Arcs use no platform trigonometry. Center and radii follow SVG 1.1 appendix F.6 with `sqrt`
   only, directions stay unit vectors instead of angles, the sweep splits at exact quarter turns,
   and each piece's control distance comes from half-angle formulas using `sqrt`.
