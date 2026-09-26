@@ -179,13 +179,18 @@ const FRAME: &[PropSpec] = &[
     BORDER,
 ];
 
+/// The name a `repeat` binds its item to when it leaves out `as`.
+pub(crate) const ITEM_NAME: &str = "item";
+/// The name a `repeat` binds its index to when it leaves out `index_as`.
+pub(crate) const INDEX_NAME: &str = "index";
+
 const REPEAT: &[PropSpec] = &[
     spec("each", ValueKind::Any, DefaultValue::EmptyList),
-    spec("as", ValueKind::Identifier, DefaultValue::Text("item")),
+    spec("as", ValueKind::Identifier, DefaultValue::Text(ITEM_NAME)),
     spec(
         "index_as",
         ValueKind::Identifier,
-        DefaultValue::Text("index"),
+        DefaultValue::Text(INDEX_NAME),
     ),
 ];
 

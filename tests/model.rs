@@ -312,7 +312,7 @@ fn test_expression_objects_inside_literals_and_state_stay_data() {
     ));
     assert!(matches!(
         children[1].property("each"),
-        Some(PropValue::Expression(source)) if source == "state.items"
+        Some(PropValue::Expression(expression)) if expression.source() == "state.items"
     ));
     assert!(matches!(
         envelope.state.get("total"),

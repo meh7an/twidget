@@ -6,12 +6,13 @@ use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use super::table::{DefaultValue, ValueKind, COMMON_PROPERTIES};
+use super::table::{DefaultValue, ValueKind, COMMON_PROPERTIES, INDEX_NAME, ITEM_NAME};
 use super::{
     color, Envelope, Node, NodeKind, PropValue, Property, Symbol, Template, TemplateRef,
     TemplateSource, Tick, Width,
 };
 use crate::budget;
+use crate::expr::{self, Expression, NameFrame, Names, ParseError};
 use crate::json::{Object, Value};
 use crate::path;
 use crate::{Error, Result};
@@ -90,7 +91,7 @@ fn template(value: &Value, loc: Loc) -> Result<Template> {
     let Some(root) = fields.get("root") else {
         return Err(root_loc.error("missing field"));
     };
-    let root = loader.node(root, root_loc, Context::Flow)?;
+    let root = loader.node(root, root_loc, Context::Flow, Names::default())?;
     Ok(Template {
         id,
         version,
@@ -191,7 +192,8 @@ fn summary(value: Option<&Value>, loc: Loc) -> Result<Option<PropValue>> {
         return Ok(None);
     };
     if let Some(source) = expression(value, loc)? {
-        return Ok(Some(PropValue::Expression(source)));
+        let summary = parse_expression(source, Names::default(), loc)?;
+        return Ok(Some(PropValue::Expression(summary)));
     }
     let Value::String(text) = value else {
         return Err(loc.error("expected a string"));
@@ -233,7 +235,7 @@ fn as_str(value: &Value) -> Option<&str> {
 
 /// The source of an expression written as `{"=": "<source>"}`. Callers only ask about a
 /// property's whole value, so the same shape inside a literal stays plain data.
-fn expression(value: &Value, loc: Loc) -> Result<Option<String>> {
+fn expression<'v>(value: &'v Value, loc: Loc) -> Result<Option<&'v str>> {
     let Value::Object(fields) = value else {
         return Ok(None);
     };
@@ -242,12 +244,40 @@ fn expression(value: &Value, loc: Loc) -> Result<Option<String>> {
     }
     match fields.get("=") {
         None => Ok(None),
-        Some(Value::String(source)) if source.len() > budget::EXPRESSION_LENGTH.limit => {
-            Err(budget::EXPRESSION_LENGTH.exceeded())
-        }
-        Some(Value::String(source)) => Ok(Some(source.clone())),
+        Some(Value::String(source)) => Ok(Some(source)),
         Some(_) => Err(loc.error("expression source must be a string")),
     }
+}
+
+/// Parses an expression's source against the names the enclosing `repeat`s bind. A syntax error
+/// names the byte in the source where it starts.
+fn parse_expression(source: &str, names: Names<'_>, loc: Loc) -> Result<Expression> {
+    expr::parse(source, names).map_err(|error| match error {
+        ParseError::Invalid { offset, reason } => Error::Schema {
+            location: format!("{}, byte {offset}", loc.text()),
+            reason,
+        },
+        ParseError::Budget(budget) => budget.exceeded(),
+    })
+}
+
+/// The name a `repeat` binds under `field`, or `default` without one. A value that is not a
+/// name falls back to `default` here and fails when the property itself is checked.
+fn binding_name<'v>(
+    fields: &'v Object,
+    field: &str,
+    default: &'static str,
+    loc: Loc,
+) -> Result<&'v str> {
+    let Some(Value::String(name)) = fields.get(field) else {
+        return Ok(default);
+    };
+    if name == "state" || name == "env" {
+        return Err(loc
+            .key(field)
+            .error("a binding cannot be named state or env"));
+    }
+    Ok(name)
 }
 
 fn object<'v>(value: &'v Value, loc: Loc) -> Result<&'v Object> {
@@ -403,11 +433,22 @@ impl Loader {
         Ok(Symbol {
             name: name.to_owned(),
             view_box: view_box(sides, view_box_loc)?,
-            shapes: self.children(fields.get("shapes"), loc.key("shapes"), Context::Symbol)?,
+            shapes: self.children(
+                fields.get("shapes"),
+                loc.key("shapes"),
+                Context::Symbol,
+                Names::default(),
+            )?,
         })
     }
 
-    fn node(&mut self, value: &Value, loc: Loc, context: Context) -> Result<Node> {
+    fn node(
+        &mut self,
+        value: &Value,
+        loc: Loc,
+        context: Context,
+        names: Names<'_>,
+    ) -> Result<Node> {
         let fields = object(value, loc)?;
         self.nodes = self.nodes.saturating_add(1);
         if self.nodes > budget::TEMPLATE_NODES.limit {
@@ -425,27 +466,48 @@ impl Loader {
             let Some(fallback) = fields.get("fallback") else {
                 return Err(type_loc.error("unknown node type"));
             };
-            return self.node(fallback, loc.key("fallback"), context);
+            return self.node(fallback, loc.key("fallback"), context, names);
         };
         if !context.allows(kind) {
             return Err(type_loc.error(context.refusal()));
         }
-        let properties = self.properties(fields, kind, loc, context)?;
+        // A `repeat` binds its item and index inside its child, and in its `key` too, since it
+        // works out one key per item.
+        let frame;
+        let inner = if kind == NodeKind::Repeat {
+            let item = binding_name(fields, "as", ITEM_NAME, loc)?;
+            let index = binding_name(fields, "index_as", INDEX_NAME, loc)?;
+            if item == index {
+                return Err(loc
+                    .key("index_as")
+                    .error("expected a name other than the item's"));
+            }
+            frame = NameFrame::new(item, index, names);
+            frame.names()
+        } else {
+            names
+        };
+        let properties = self.properties(fields, kind, loc, context, names, inner)?;
         let children_loc = loc.key("children");
         let child_loc = loc.key("child");
         let (children, child) = match kind {
             NodeKind::Column | NodeKind::Row | NodeKind::ScrollX => (
-                self.children(fields.get("children"), children_loc, Context::Flow)?,
+                self.children(fields.get("children"), children_loc, Context::Flow, names)?,
                 None,
             ),
             NodeKind::Canvas => (
-                self.children(fields.get("children"), children_loc, Context::Canvas)?,
+                self.children(fields.get("children"), children_loc, Context::Canvas, names)?,
                 None,
             ),
             NodeKind::Frame => match fields.get("child") {
                 Some(child) => (
                     Vec::new(),
-                    Some(Box::new(self.node(child, child_loc, Context::Flow)?)),
+                    Some(Box::new(self.node(
+                        child,
+                        child_loc,
+                        Context::Flow,
+                        names,
+                    )?)),
                 ),
                 None => (Vec::new(), None),
             },
@@ -455,7 +517,7 @@ impl Loader {
                 };
                 (
                     Vec::new(),
-                    Some(Box::new(self.node(child, child_loc, context)?)),
+                    Some(Box::new(self.node(child, child_loc, context, inner)?)),
                 )
             }
             NodeKind::Text
@@ -484,7 +546,13 @@ impl Loader {
         })
     }
 
-    fn children(&mut self, value: Option<&Value>, loc: Loc, context: Context) -> Result<Vec<Node>> {
+    fn children(
+        &mut self,
+        value: Option<&Value>,
+        loc: Loc,
+        context: Context,
+        names: Names<'_>,
+    ) -> Result<Vec<Node>> {
         let Some(value) = value else {
             return Ok(Vec::new());
         };
@@ -494,24 +562,33 @@ impl Loader {
         items
             .iter()
             .enumerate()
-            .map(|(index, item)| self.node(item, loc.index(index), context))
+            .map(|(index, item)| self.node(item, loc.index(index), context, names))
             .collect()
     }
 
+    /// Checks the node's properties. `names` is the scope around the node and `inner` the one a
+    /// `repeat` makes for its items, which only its `key` sees.
     fn properties(
         &mut self,
         fields: &Object,
         kind: NodeKind,
         loc: Loc,
         context: Context,
+        names: Names<'_>,
+        inner: Names<'_>,
     ) -> Result<Vec<Property>> {
         let mut properties = Vec::new();
         for spec in COMMON_PROPERTIES.iter().chain(kind.properties()) {
             let loc = loc.key(spec.name);
+            let scope = if kind == NodeKind::Repeat && spec.name == "key" {
+                inner
+            } else {
+                names
+            };
             match fields.get(spec.name) {
                 Some(value) => properties.push(Property {
                     name: spec.name,
-                    value: self.value(value, spec.kind, loc, context)?,
+                    value: self.value(value, spec.kind, loc, context, scope)?,
                 }),
                 None if spec.default == DefaultValue::Required => {
                     return Err(loc.error("missing field"));
@@ -528,12 +605,13 @@ impl Loader {
         kind: ValueKind,
         loc: Loc,
         context: Context,
+        names: Names<'_>,
     ) -> Result<PropValue> {
         if let Some(source) = expression(value, loc)? {
             if context == Context::Symbol || kind == ValueKind::Identifier {
                 return Err(loc.error("expressions are not allowed here"));
             }
-            return Ok(PropValue::Expression(source));
+            return Ok(PropValue::Expression(parse_expression(source, names, loc)?));
         }
         self.literal(value, kind, loc, context)?;
         Ok(PropValue::Literal(value.clone()))

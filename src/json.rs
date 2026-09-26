@@ -66,8 +66,8 @@ impl Object {
         self.members.is_empty()
     }
 
-    /// Appends a member; the reader has already checked that `key` is new.
-    fn push(&mut self, key: String, value: Value) {
+    /// Appends a member; the caller has already checked that `key` is new.
+    pub(crate) fn push(&mut self, key: String, value: Value) {
         self.members.push((key, value));
     }
 }

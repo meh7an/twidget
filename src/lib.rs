@@ -17,6 +17,7 @@ extern crate alloc;
 
 pub mod budget;
 mod error;
+pub mod expr;
 pub mod json;
 pub mod model;
 pub mod path;

@@ -10,6 +10,7 @@ use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::vec::Vec;
 
+use crate::expr::Expression;
 use crate::json::{self, Object, Value};
 use crate::Result;
 
@@ -184,9 +185,9 @@ pub struct Property {
 pub enum PropValue {
     /// A literal, already checked against the property's kind.
     Literal(Value),
-    /// The source of an expression written as `{"=": "<source>"}`, evaluated when the tree
-    /// resolves.
-    Expression(String),
+    /// An expression written as `{"=": "<source>"}`, parsed when the template loads and
+    /// evaluated when the tree resolves.
+    Expression(Expression),
 }
 
 /// The sixteen node types.
