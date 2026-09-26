@@ -17,7 +17,7 @@ pub use read::parse;
 pub use write::{to_string, write};
 
 /// A JSON value. Numbers are 64-bit floats, and [`parse`] never yields an infinite or NaN one.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
 pub enum Value {
     /// `null`.
@@ -35,7 +35,7 @@ pub enum Value {
 }
 
 /// A JSON object: unique keys, kept in the order they were read.
-#[derive(Debug, Default, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct Object {
     members: Vec<(String, Value)>,
 }

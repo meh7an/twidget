@@ -1,0 +1,7 @@
+{
+  "tgw": 1,
+  "template": {
+    "spec": 1, "id": "tg.test", "version": 1,
+    "root": {"type": "canvas", "view_box": [10, 10], "children": [{"type": "line", "x2": 10, "dash": [2]}]}
+  }
+}

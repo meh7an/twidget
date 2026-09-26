@@ -1,0 +1,13 @@
+{
+  "tgw": 1,
+  "template": {
+    "spec": 1, "id": "tg.test", "version": 1,
+    "root": {
+      "type": "canvas",
+      "view_box": [10, 10],
+      "children": [
+        {"type": "frame", "w": 10, "h": 10, "child": [{"type": "text", "text": "a"}, {"type": "text", "text": "b"}]}
+      ]
+    }
+  }
+}

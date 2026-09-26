@@ -1,0 +1,10 @@
+{
+  "tgw": 1,
+  "template": {
+    "spec": 1, "id": "tg.test", "version": 1,
+    "root": {
+      "type": "column",
+      "children": [{"type": "repeat", "each": [1, 2], "as": {"=": "'x'"}, "child": {"type": "divider"}}]
+    }
+  }
+}

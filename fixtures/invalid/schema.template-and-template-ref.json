@@ -1,0 +1,5 @@
+{
+  "tgw": 1,
+  "template": {"spec": 1, "id": "tg.test", "version": 1, "root": {"type": "divider"}},
+  "template_ref": {"id": "tg.chess", "version": 1}
+}

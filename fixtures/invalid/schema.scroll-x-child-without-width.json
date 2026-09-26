@@ -1,0 +1,7 @@
+{
+  "tgw": 1,
+  "template": {
+    "spec": 1, "id": "tg.test", "version": 1,
+    "root": {"type": "scroll_x", "children": [{"type": "column", "width": 100}, {"type": "column"}]}
+  }
+}

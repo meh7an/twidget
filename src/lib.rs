@@ -18,5 +18,7 @@ extern crate alloc;
 pub mod budget;
 mod error;
 pub mod json;
+pub mod model;
+pub mod path;
 
 pub use error::{Error, Result, Status};
