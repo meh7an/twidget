@@ -78,7 +78,10 @@ A `frame`'s `child` is its one flow node, or `null` when it has none. Every chil
 Coordinates and sizes of shapes are in view-box units. Shapes drawn from a symbol also carry
 `transform`, `[a, b, c, d, e, f]` in SVG matrix order, after `join`: it maps the shape's own
 coordinates, stroke width and dash included, into the canvas, as SVG's `transform` attribute
-does. `d` uses only absolute `M`, `L`, `C` and `Z`.
+does. `d` is never empty, since a path without data is left out, and uses only absolute `M`,
+`L`, `C` and `Z`. Every subpath starts with an `M`: drawing that goes on after a `Z` begins with
+an `M` back to the closed subpath's start, so no app has to know where its path library puts the
+pen after a close.
 
 A connector arrives as a `path` for its line, stopping at each arrowhead's base, and a closed
 `path` for each arrowhead, filled in the line's stroke color. The line carries the connector's

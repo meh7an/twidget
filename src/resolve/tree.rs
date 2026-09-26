@@ -14,13 +14,14 @@ use crate::budget;
 use crate::expr::{Bindings, Env, Evaluator, Frame};
 use crate::json::{self, Object, Value};
 use crate::model::{Node, NodeKind, Symbol, Template, Tick};
-use crate::Result;
+use crate::{path, Result};
 
 pub(super) fn resolve(template: &Template, state: &Object, env: &Env) -> Result<Resolved> {
     let mut resolver = Resolver {
         evaluator: Evaluator::new(state, env),
         symbols: &template.symbols,
         nodes: 0,
+        path_commands: 0,
     };
     let mut top = Siblings::new(String::new(), None);
     resolver.child(&template.root, 0, &mut top, Bindings::default())?;
@@ -163,6 +164,8 @@ struct Resolver<'a> {
     evaluator: Evaluator<'a>,
     symbols: &'a [Symbol],
     nodes: usize,
+    /// Normalized path commands drawn so far.
+    path_commands: usize,
 }
 
 impl Resolver<'_> {
@@ -242,8 +245,11 @@ impl Resolver<'_> {
             return self.defer(node, segment, siblings, bindings);
         }
         let key = siblings.key(&siblings.unique(&segment.text));
-        let properties = value::properties(&mut self.evaluator, node, bindings, false)?;
+        let mut properties = value::properties(&mut self.evaluator, node, bindings, false)?;
         if drops(node.kind, siblings.parent, &properties) {
+            return Ok(());
+        }
+        if node.kind == NodeKind::Path && !self.normalize(&mut properties)? {
             return Ok(());
         }
         self.count(1)?;
@@ -308,6 +314,9 @@ impl Resolver<'_> {
             }
             let shape_segment = Segment::child(self.key(shape, bindings)?, index);
             let mut drawn = value::properties(&mut self.evaluator, shape, bindings, true)?;
+            if shape.kind == NodeKind::Path && !self.normalize(&mut drawn)? {
+                continue;
+            }
             for (name, value) in &mut drawn {
                 if matches!(*name, "fill" | "stroke")
                     && matches!(&*value, Value::String(paint) if paint == "current")
@@ -377,7 +386,13 @@ impl Resolver<'_> {
         }
         let mut drawn = Vec::with_capacity(connectors.len());
         for connector in &connectors {
-            let parts = connector_parts(connector, &nodes, &frames);
+            // Connector paths are normalized and counted as every other path is.
+            let mut parts = Vec::new();
+            for mut part in connector_parts(connector, &nodes, &frames) {
+                if self.normalize(&mut part.properties)? {
+                    parts.push(part);
+                }
+            }
             self.count(parts.len())?;
             drawn.push((connector.position, parts));
         }
@@ -405,6 +420,30 @@ impl Resolver<'_> {
     fn key(&mut self, node: &Node, bindings: Bindings<'_>) -> Result<Option<String>> {
         let key = value::raw(&mut self.evaluator, node, "key", bindings)?;
         Ok(key.as_deref().and_then(key_text))
+    }
+
+    /// Normalizes a path's `d` in place and counts its commands against the budget. Returns
+    /// whether the path draws anything: empty data leaves it out, and so does data breaking the
+    /// grammar, which only an expression can produce.
+    fn normalize(&mut self, properties: &mut [(&'static str, Value)]) -> Result<bool> {
+        let Some((_, Value::String(data))) = properties.iter_mut().find(|(name, _)| *name == "d")
+        else {
+            return Ok(false);
+        };
+        let Ok(segments) = path::parse(data) else {
+            return Ok(false);
+        };
+        let commands = path::normalize(&segments);
+        if commands.is_empty() {
+            return Ok(false);
+        }
+        self.path_commands = self.path_commands.saturating_add(commands.len());
+        if self.path_commands > budget::PATH_COMMANDS.limit {
+            return Err(budget::PATH_COMMANDS.exceeded());
+        }
+        data.clear();
+        path::write(&commands, data);
+        Ok(true)
     }
 
     /// Counts resolved nodes against the budget.

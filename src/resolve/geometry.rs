@@ -5,19 +5,12 @@
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use crate::json::{self, Value};
+use crate::path::{self, Command};
 
-/// A point in view-box units.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub(super) struct Point {
-    pub(super) x: f64,
-    pub(super) y: f64,
-}
+pub(super) use crate::path::Point;
 
-impl Point {
-    fn finite(self) -> bool {
-        self.x.is_finite() && self.y.is_finite()
-    }
+fn finite(point: &Point) -> bool {
+    point.x.is_finite() && point.y.is_finite()
 }
 
 /// A frame's box in view-box units.
@@ -86,7 +79,7 @@ pub(super) fn route(from: Rect, to: Rect, orthogonal: bool) -> Option<Vec<Point>
     } else {
         straight(from, to)?
     };
-    points.iter().all(|point| point.finite()).then_some(points)
+    points.iter().all(finite).then_some(points)
 }
 
 /// The line between the two centers, clipped at each box's edge.
@@ -189,10 +182,7 @@ pub(super) fn arrowhead(tip: Point, back: Point, stroke_width: f64) -> Option<[P
             y: base.y - half * ux,
         },
     ];
-    corners
-        .iter()
-        .all(|corner| corner.finite())
-        .then_some(corners)
+    corners.iter().all(finite).then_some(corners)
 }
 
 /// The unit vector along `(dx, dy)`, or `None` when it has no length.
@@ -230,19 +220,25 @@ pub(super) fn shorten_start(points: &mut Vec<Point>, length: f64) {
     points.reverse();
 }
 
-/// Path data through `points` in absolute `M` and `L`, closed by `Z` when `closed`, with numbers
-/// as the JSON writer writes them.
+/// Path data through `points` in absolute `M` and `L`, closed by `Z` when `closed`, written as
+/// normalized paths are.
 pub(super) fn path_data(points: &[Point], closed: bool) -> String {
-    let mut data = String::new();
-    for (index, point) in points.iter().enumerate() {
-        data.push_str(if index == 0 { "M" } else { " L" });
-        json::write(&Value::Number(point.x), &mut data);
-        data.push(' ');
-        json::write(&Value::Number(point.y), &mut data);
-    }
+    let mut commands: Vec<Command> = points
+        .iter()
+        .enumerate()
+        .map(|(index, point)| {
+            if index == 0 {
+                Command::Move(*point)
+            } else {
+                Command::Line(*point)
+            }
+        })
+        .collect();
     if closed {
-        data.push_str(" Z");
+        commands.push(Command::Close);
     }
+    let mut data = String::new();
+    path::write(&commands, &mut data);
     data
 }
 

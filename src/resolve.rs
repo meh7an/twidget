@@ -13,9 +13,12 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 
 use crate::expr::{Bindings, Env, Evaluator};
-use crate::json::{Object, Value};
+use crate::json::{self, Object, Value};
 use crate::model::{self, Envelope, NodeKind, PropValue, Template, TemplateSource, Width};
 use crate::{Error, Result};
+
+/// The resolved-JSON format this crate writes, the number in its `tgw_resolved` member.
+pub const FORMAT: u32 = 1;
 
 /// A widget message bound to its template, as the C API's `TWidgetInstance` holds it.
 #[derive(Debug)]
@@ -72,8 +75,8 @@ impl Instance {
     /// Resolves the tree for `env`.
     ///
     /// # Errors
-    /// [`Error::Budget`] when the resolve runs out of fuel or passes the resolved-node or
-    /// items-per-repeat budget.
+    /// [`Error::Budget`] when the resolve runs out of fuel or passes the resolved-node,
+    /// items-per-repeat or path-command budget.
     pub fn resolve(&self, env: &Env) -> Result<Resolved> {
         tree::resolve(&self.template, &self.state, env)
     }
@@ -129,6 +132,29 @@ pub struct Resolved {
     pub next_wakeup_ms: Option<i64>,
 }
 
+impl Resolved {
+    /// The tree as resolved JSON, as `docs/RESOLVED.md` describes it: compact, with members in a
+    /// fixed order and numbers in their shortest round-trip form, so equal trees give equal
+    /// bytes.
+    pub fn json(&self) -> String {
+        let mut out = String::new();
+        out.push_str("{\"tgw_resolved\":");
+        json::write(&Value::Number(f64::from(FORMAT)), &mut out);
+        out.push_str(",\"width\":");
+        match self.width {
+            Width::Fill => out.push_str("\"fill\""),
+            Width::Units(units) => json::write(&Value::Number(units), &mut out),
+        }
+        out.push_str(",\"root\":");
+        match &self.root {
+            Some(root) => root.write(&mut out),
+            None => out.push_str("null"),
+        }
+        out.push('}');
+        out
+    }
+}
+
 /// A node as clients receive it.
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
@@ -152,5 +178,63 @@ impl ResolvedNode {
             .iter()
             .find(|(property, _)| *property == name)
             .map(|(_, value)| value)
+    }
+
+    /// Appends the node as resolved JSON. The recursion follows the template's nesting, which
+    /// the JSON nesting budget bounds, since expansion only ever adds siblings.
+    fn write(&self, out: &mut String) {
+        out.push_str("{\"type\":");
+        json::write_string(self.kind.name(), out);
+        out.push_str(",\"key\":");
+        json::write_string(&self.key, out);
+        for (name, value) in &self.properties {
+            out.push(',');
+            json::write_string(name, out);
+            out.push(':');
+            json::write(value, out);
+        }
+        match self.kind {
+            NodeKind::Column | NodeKind::Row | NodeKind::ScrollX | NodeKind::Canvas => {
+                out.push_str(",\"children\":[");
+                for (index, child) in self.children.iter().enumerate() {
+                    if index > 0 {
+                        out.push(',');
+                    }
+                    child.write(out);
+                }
+                out.push(']');
+            }
+            NodeKind::Frame => {
+                out.push_str(",\"child\":");
+                match &self.child {
+                    Some(child) => child.write(out),
+                    None => out.push_str("null"),
+                }
+            }
+            NodeKind::Repeat
+            | NodeKind::Text
+            | NodeKind::TextField
+            | NodeKind::Chart
+            | NodeKind::Divider
+            | NodeKind::Rect
+            | NodeKind::Ellipse
+            | NodeKind::Line
+            | NodeKind::Path
+            | NodeKind::Use
+            | NodeKind::Connector => {}
+        }
+        out.push('}');
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_format_matches_the_header() {
+        let header = include_str!("../include/twidget.h");
+        let define = alloc::format!("#define TWIDGET_RESOLVED_FORMAT {FORMAT}u\n");
+        assert!(header.contains(&define), "header lacks `{define}`");
     }
 }

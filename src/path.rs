@@ -1,10 +1,17 @@
-//! SVG path data, parsed once for the template checks and again when paths are normalized.
+//! SVG path data, parsed once for the template checks and again when paths are normalized to the
+//! four commands clients draw.
 //!
 //! The grammar is SVG 1.1's: a moveto first, then `M L H V C S Q T A Z` in absolute (uppercase)
 //! or relative (lowercase) form. Repeating a command's arguments repeats the command, numbers are
 //! separated by whitespace, a comma or a sign, and arc flags may run together.
 
+mod arc;
+mod normalize;
+mod trig;
+
 use alloc::vec::Vec;
+
+pub use normalize::{normalize, write, Command, Point};
 
 /// One command after implicit repeats expand, as written.
 #[derive(Debug, Clone, Copy, PartialEq)]

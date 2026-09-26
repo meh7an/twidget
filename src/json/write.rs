@@ -48,9 +48,10 @@ pub fn write(value: &Value, out: &mut String) {
     }
 }
 
-/// Escapes only what JSON requires: the quote, the backslash and U+0000 to U+001F, using the
-/// two-character forms where JSON has them and lowercase hex otherwise.
-fn write_string(text: &str, out: &mut String) {
+/// Appends `text` as a JSON string, escaping only what JSON requires: the quote, the backslash
+/// and U+0000 to U+001F, using the two-character forms where JSON has them and lowercase hex
+/// otherwise.
+pub(crate) fn write_string(text: &str, out: &mut String) {
     out.push('"');
     for c in text.chars() {
         match c {

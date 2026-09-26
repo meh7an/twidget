@@ -176,6 +176,26 @@ fn test_use_label_goes_to_the_first_shape_drawn() {
 }
 
 #[test]
+fn test_symbol_paths_are_normalized_in_every_use() {
+    let defs = r#"{"tick": {"view_box": [10, 10], "shapes": [
+        {"type": "path", "d": "m1 5 l3 3 6 -6", "fill": "none", "stroke": "current"},
+        {"type": "path", "d": ""}]}}"#;
+    let root = r#"{"type": "canvas", "view_box": [20, 10], "children": [
+        {"type": "use", "symbol": "tick", "w": 10, "h": 10},
+        {"type": "use", "symbol": "tick", "x": 10, "w": 10, "h": 10}]}"#;
+    let resolved = resolve(defs, root, "{}");
+    // The empty shape draws nothing, so each `use` draws one path.
+    let drawn: Vec<String> = paths(&resolved)
+        .into_iter()
+        .map(|(key, d)| format!("{key} {d}"))
+        .collect();
+    assert_eq!(
+        drawn,
+        ["0/0/0 \"M1 5 L4 8 L10 2\"", "0/1/0 \"M1 5 L4 8 L10 2\""]
+    );
+}
+
+#[test]
 fn test_unknown_symbols_fail_the_load_or_drop_the_node() {
     let dot = r#"{"dot": {"view_box": [2, 2], "shapes": [{"type": "ellipse"}]}}"#;
     let literal = r#"{"type": "canvas", "view_box": [4, 4], "children": [

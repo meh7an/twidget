@@ -14,6 +14,7 @@ use alloc::vec::Vec;
 use crate::budget::{self, Budget};
 
 pub use read::parse;
+pub(crate) use write::write_string;
 pub use write::{to_string, write};
 
 /// A JSON value. Numbers are 64-bit floats, and [`parse`] never yields an infinite or NaN one.

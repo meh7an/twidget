@@ -1,5 +1,5 @@
-//! The resolver: defaults, fallbacks, visibility, keys, charts, entities, budgets, wake-ups,
-//! summaries, instances, and the fixtures resolved at the fixed environment.
+//! The resolver: defaults, fallbacks, visibility, keys, charts, entities, paths, budgets,
+//! wake-ups, summaries, instances, and the fixtures resolved at the fixed environment.
 
 // Tests fail by panicking, so the lints that keep panics out of library code do not apply here.
 #![allow(
@@ -17,6 +17,7 @@ use twidget::budget;
 use twidget::expr::Env;
 use twidget::json::{self, Value};
 use twidget::model::{NodeKind, Template, ValueKind, COMMON_PROPERTIES};
+use twidget::path;
 use twidget::resolve::{Instance, Resolved, ResolvedNode};
 use twidget::Error;
 
@@ -86,7 +87,8 @@ const COLUMN: &str = "a11y=null gap=0 padding=[0,0,0,0] align=\"start\" backgrou
 const SHAPE_PAINT: &str = "stroke_width=1 opacity=1 dash=null cap=\"butt\" join=\"miter\"";
 
 /// Each minimal node's key and what it resolves to; the scroll_x child, the canvas view box and
-/// the root are what the tree needs to hold them.
+/// the root are what the tree needs to hold them. The path at `0/3/4` is missing, since its `d`
+/// is empty and an empty path drops out.
 fn defaults() -> Vec<(&'static str, String)> {
     vec![
         ("0", String::from(COLUMN)),
@@ -118,10 +120,6 @@ fn defaults() -> Vec<(&'static str, String)> {
         (
             "0/3/3",
             format!("a11y=null x1=0 y1=0 x2=0 y2=0 fill=null stroke=\"text\" {SHAPE_PAINT}"),
-        ),
-        (
-            "0/3/4",
-            format!("a11y=null d=\"\" fill=\"text\" stroke=null {SHAPE_PAINT}"),
         ),
         (
             "0/4",
@@ -202,6 +200,7 @@ fn check_defaults(tree: &str, expressions: usize) {
     for (key, expected) in defaults() {
         assert_eq!(render(find(root_of(&resolved), key)), expected, "{key}");
     }
+    assert!(!keys(root_of(&resolved)).contains(&"0/3/4"));
 }
 
 #[test]
@@ -531,6 +530,66 @@ fn test_budgets_fail_the_resolve() {
         budget_name(resolve_at(&envelope("", costly, "{}"), &Env::TEST)),
         budget::EVALUATION_FUEL.name
     );
+}
+
+#[test]
+fn test_path_data_resolves_normalized_or_drops_out() {
+    let root = r#"{"type": "canvas", "view_box": [10, 10], "children": [
+        {"type": "path", "d": "m1 1 h2 v2 z"},
+        {"type": "path", "d": {"=": "state.curve"}},
+        {"type": "path", "d": {"=": "state.broken"}},
+        {"type": "path", "d": {"=": "state.blank"}},
+        {"type": "path", "d": {"=": "state.number"}},
+        {"type": "path", "d": ""}
+    ]}"#;
+    let state = r#"{"curve": "M0 0 Q3 3 6 0", "broken": "M0 0 L1", "blank": " \n", "number": 5}"#;
+    let resolved = resolve(root, state);
+    let canvas = root_of(&resolved);
+    // Broken data, blank data, a number and an empty literal all leave their paths out.
+    assert_eq!(keys(canvas), ["0", "0/0", "0/1"]);
+    assert_eq!(
+        render(find(canvas, "0/0")),
+        format!("a11y=null d=\"M1 1 L3 1 L3 3 Z\" fill=\"text\" stroke=null {SHAPE_PAINT}")
+    );
+    assert_eq!(
+        find(canvas, "0/1").property("d"),
+        Some(&Value::String(String::from("M0 0 C2 2 4 2 6 0")))
+    );
+}
+
+#[test]
+fn test_normalized_path_commands_count_toward_the_budget() {
+    // Each arc sweeps 300 degrees and becomes four cubics, so the path's 103 segments normalize
+    // to 400 commands, and 50 copies reach the budget exactly.
+    let d = format!(
+        "M0 0 A{}5 5 0 115 0 L1 1 2 2 3 3",
+        "5 5 0 115 0 5 5 0 110 0 ".repeat(49)
+    );
+    let segments = path::parse(&d).unwrap();
+    assert_eq!(segments.len(), 103);
+    assert_eq!(path::normalize(&segments).len(), 400);
+    // The copies are paths of their own, or the shape of a symbol drawn by each `use`.
+    let symbols = format!(
+        "\"defs\": {{\"symbols\": {{\"S\": {{\"view_box\": [10, 10], \"shapes\": \
+         [{{\"type\": \"path\", \"d\": \"{d}\"}}]}}}}}},"
+    );
+    let path = format!("{{\"type\": \"path\", \"d\": \"{d}\"}}");
+    let symbol = r#"{"type": "use", "symbol": "S", "w": 10, "h": 10}"#;
+    for (fields, child) in [("", path.as_str()), (symbols.as_str(), symbol)] {
+        let canvas = |extra: &str| {
+            format!(
+                "{{\"type\": \"canvas\", \"view_box\": [10, 10], \"children\": [{{\"type\": \
+                 \"repeat\", \"each\": {{\"=\": \"range(50)\"}}, \"child\": {child}}}{extra}]}}"
+            )
+        };
+        let full = resolve_at(&envelope(fields, &canvas(""), "{}"), &Env::TEST).unwrap();
+        assert_eq!(root_of(&full).children.len(), 50);
+        let one_more = canvas(r#", {"type": "path", "d": "M0 0"}"#);
+        assert_eq!(
+            budget_name(resolve_at(&envelope(fields, &one_more, "{}"), &Env::TEST)),
+            budget::PATH_COMMANDS.name
+        );
+    }
 }
 
 fn wakeup(fields: &str, root: &str, now_ms: i64) -> Option<i64> {
