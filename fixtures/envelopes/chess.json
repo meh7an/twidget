@@ -1,0 +1,19 @@
+{
+  "tgw": 1,
+  "template_ref": { "id": "tg.chess", "version": 1 },
+  "state": {
+    "white": "Mehran",
+    "black": "Ali",
+    "turn": "b",
+    "last": [
+      [4, 6],
+      [4, 4]
+    ],
+    "pieces": [
+      { "id": "wK", "kind": "K", "side": "w", "x": 6, "y": 7 },
+      { "id": "bK", "kind": "K", "side": "b", "x": 4, "y": 0 },
+      { "id": "wP5", "kind": "P", "side": "w", "x": 4, "y": 4 },
+      { "id": "bP4", "kind": "P", "side": "b", "x": 3, "y": 1 }
+    ]
+  }
+}

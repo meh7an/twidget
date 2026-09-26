@@ -1,0 +1,70 @@
+{
+  "tgw": 1,
+  "template": {
+    "spec": 1,
+    "id": "tg.shapes",
+    "version": 1,
+    "summary": "Vector shapes",
+    "defs": {
+      "symbols": {
+        "flag": {
+          "view_box": [24, 24],
+          "shapes": [
+            {
+              "type": "line",
+              "x1": 6,
+              "y1": 3,
+              "x2": 6,
+              "y2": 21,
+              "stroke": "current",
+              "stroke_width": 2,
+              "cap": "round"
+            },
+            { "type": "path", "d": "M7 4 L20 7.5 L7 11 Z", "fill": "current" },
+            { "type": "ellipse", "cx": 6, "cy": 21.5, "rx": 4, "ry": 1.5, "fill": "current" }
+          ]
+        }
+      }
+    },
+    "root": {
+      "type": "canvas",
+      "view_box": [120, 80],
+      "background": "surface",
+      "radius": 12,
+      "children": [
+        {
+          "type": "rect",
+          "x": 6,
+          "y": 6,
+          "w": 34,
+          "h": 30,
+          "rx": 6,
+          "fill": "palette_6",
+          "stroke": "divider",
+          "stroke_width": 1
+        },
+        { "type": "use", "symbol": "flag", "x": 44, "y": 8, "w": 26, "h": 26, "color": "accent" },
+        {
+          "type": "ellipse",
+          "cx": 94,
+          "cy": 21,
+          "rx": 20,
+          "ry": 15,
+          "fill": "palette_4@0.8",
+          "stroke": "text",
+          "stroke_width": 1.5,
+          "dash": [4, 2]
+        },
+        {
+          "type": "path",
+          "d": "M6 78 L6 60 H20 V52 C26 42 38 42 44 52 S58 62 64 52 Q70 42 76 52 T88 52 A8 8 0 0 1 104 52 L114 52 V78 Z m94 -12 l-6 -3 h-8 c-3 -3 -7 -3 -10 0 s-7 3 -10 0 q-5 -4 -10 0 t-10 0 a5 5 0 0 0 -10 0 v11 l64 0 z",
+          "fill": "palette_2",
+          "stroke": "text_secondary",
+          "stroke_width": 1,
+          "join": "round",
+          "opacity": 0.9
+        }
+      ]
+    }
+  }
+}

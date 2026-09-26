@@ -1,0 +1,33 @@
+{
+  "tgw": 1,
+  "template": {
+    "spec": 1,
+    "id": "tg.chart",
+    "version": 1,
+    "summary": { "=": "state.title" },
+    "root": {
+      "type": "column",
+      "padding": 12,
+      "gap": 8,
+      "background": "surface",
+      "radius": 12,
+      "children": [
+        { "type": "text", "style": "title", "text": { "=": "state.title" } },
+        {
+          "type": "chart",
+          "kind": "line",
+          "labels": { "=": "state.labels" },
+          "series": { "=": "state.series" }
+        }
+      ]
+    }
+  },
+  "state": {
+    "title": "Daily active users",
+    "labels": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+    "series": [
+      { "name": "This week", "values": [120, 132, 101, 134, 190, 230, 210], "color": "palette_6" },
+      { "name": "Last week", "values": [98, 110, null, 102, 160, 188, 175] }
+    ]
+  }
+}

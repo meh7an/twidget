@@ -1,0 +1,38 @@
+{
+  "tgw": 1,
+  "template": {
+    "spec": 1,
+    "id": "tg.textbox",
+    "version": 1,
+    "summary": { "=": "state.label + ': ' + state.text" },
+    "root": {
+      "type": "column",
+      "padding": 12,
+      "gap": 4,
+      "background": "surface",
+      "radius": 12,
+      "children": [
+        {
+          "type": "text_field",
+          "label": { "=": "state.label" },
+          "value": { "=": "state.text" },
+          "placeholder": { "=": "state.placeholder" },
+          "lines": 3
+        },
+        {
+          "type": "text",
+          "style": "caption",
+          "color": "text_secondary",
+          "align": "end",
+          "tabular": true,
+          "text": { "=": "string(len(state.text)) + ' / 280'" }
+        }
+      ]
+    }
+  },
+  "state": {
+    "label": "Note for the club",
+    "text": "Meet at the café at 7 — bring the board.",
+    "placeholder": "Write a note"
+  }
+}

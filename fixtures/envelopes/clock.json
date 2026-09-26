@@ -1,0 +1,36 @@
+{
+  "tgw": 1,
+  "template": {
+    "spec": 1,
+    "id": "tg.clock",
+    "version": 1,
+    "tick": "second",
+    "width": 240,
+    "summary": { "=": "state.label + ' ' + format_time(env.now, 'HH:mm')" },
+    "root": {
+      "type": "column",
+      "padding": 16,
+      "gap": 4,
+      "align": "center",
+      "background": "surface",
+      "radius": 12,
+      "children": [
+        {
+          "type": "text",
+          "style": "display",
+          "tabular": true,
+          "align": "center",
+          "text": { "=": "format_time(env.now, 'HH:mm:ss')" }
+        },
+        {
+          "type": "text",
+          "style": "caption",
+          "color": "text_secondary",
+          "align": "center",
+          "text": { "=": "state.label" }
+        }
+      ]
+    }
+  },
+  "state": { "label": "Local time" }
+}

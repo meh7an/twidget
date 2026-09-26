@@ -1,0 +1,68 @@
+{
+  "tgw": 1,
+  "template": {
+    "spec": 1,
+    "id": "tg.flow",
+    "version": 1,
+    "summary": { "=": "'Flowchart: ' + string(len(state.nodes)) + ' steps'" },
+    "root": {
+      "type": "canvas",
+      "view_box": [200, 160],
+      "background": "surface",
+      "radius": 12,
+      "children": [
+        {
+          "type": "repeat",
+          "each": { "=": "state.edges" },
+          "as": "e",
+          "child": {
+            "type": "connector",
+            "from": { "=": "e.from" },
+            "to": { "=": "e.to" },
+            "route": "orthogonal",
+            "arrow": "end",
+            "stroke": "text_secondary",
+            "stroke_width": 1.5
+          }
+        },
+        {
+          "type": "repeat",
+          "each": { "=": "state.nodes" },
+          "as": "n",
+          "key": { "=": "n.id" },
+          "child": {
+            "type": "frame",
+            "x": { "=": "n.x" },
+            "y": { "=": "n.y" },
+            "w": { "=": "n.w" },
+            "h": { "=": "n.h" },
+            "padding": 4,
+            "align": "center",
+            "background": "surface_alt",
+            "radius": 8,
+            "border": { "color": "accent", "width": 1 },
+            "child": {
+              "type": "text",
+              "style": "caption",
+              "align": "center",
+              "text": { "=": "n.label" }
+            }
+          }
+        }
+      ]
+    }
+  },
+  "state": {
+    "nodes": [
+      { "id": "start", "x": 70, "y": 8, "w": 60, "h": 24, "label": "Start" },
+      { "id": "check", "x": 65, "y": 56, "w": 70, "h": 30, "label": "Valid?" },
+      { "id": "save", "x": 20, "y": 124, "w": 70, "h": 28, "label": "Save" },
+      { "id": "retry", "x": 110, "y": 124, "w": 70, "h": 28, "label": "Retry" }
+    ],
+    "edges": [
+      { "from": "start", "to": "check" },
+      { "from": "check", "to": "save" },
+      { "from": "check", "to": "retry" }
+    ]
+  }
+}

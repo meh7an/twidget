@@ -1,0 +1,29 @@
+{
+  "tgw": 1,
+  "template_ref": { "id": "tg.kanban", "version": 1 },
+  "state": {
+    "lanes": [
+      {
+        "title": "To do",
+        "cards": [
+          { "id": "c1", "title": "Draw the final chess pieces" },
+          { "id": "c2", "title": "Tune budgets with Widget Lab profiling" }
+        ]
+      },
+      {
+        "title": "In progress",
+        "cards": [
+          { "id": "c3", "title": "Strict JSON reader" },
+          { "id": "c4", "title": "Conformance fixtures for all eight widgets" }
+        ]
+      },
+      {
+        "title": "Done",
+        "cards": [
+          { "id": "c5", "title": "Spec v0.1" },
+          { "id": "c6", "title": "Crate scaffold" }
+        ]
+      }
+    ]
+  }
+}
