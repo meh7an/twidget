@@ -1,8 +1,9 @@
 # Live widgets spec v0
 
-As of 2026-09-26, revision v0.2. This repository copy leads the original design doc and is the
+As of 2026-09-26, revision v0.3. This repository copy leads the original design doc and is the
 source of truth for implementation. v0.1 adds the Implementation clarifications section at the end,
-and v0.2 settles the defaults, required properties and paint values that section left open.
+v0.2 settles the defaults, required properties and paint values that section left open, and v0.3
+settles the expression edge cases it left open.
 
 ## Overview
 
@@ -762,23 +763,32 @@ than the sections above, it governs, and each subsection names the milestone tha
   `null` for anything else; `&&` and `||` short-circuit and return booleans.
 - `+` with a string on either side converts the other side with `string()`, and `+` with a list
   or map yields `null`. `==` and `!=` compare lists and maps structurally, spending one fuel step
-  per element.
-- `round` rounds ties away from zero. `format_number(x, d)` clamps `d` to 0–10 and formats the
-  exact binary value with ties to even, as Rust's `{:.d$}` does. Any non-finite result yields
-  `null`.
+  per element. `!=` is always the negation of `==`, so it yields `true` for different types.
+- `<`, `<=`, `>` and `>=` compare two numbers numerically and two strings by Unicode scalar
+  values. Any other pair yields `false`, as different types do, so they always yield a boolean.
+- `round` rounds ties away from zero. `format_number(x, d)` clamps a whole `d` to 0–10, yields
+  `null` for a fractional one, and formats the exact binary value with ties to even, as Rust's
+  `{:.d$}` does. Any non-finite result yields `null`.
 - `range(n)` takes a whole number from 0 to 1,000. Above 1,000 it fails the resolve with
   `TWIDGET_ERROR_BUDGET`, and a fractional or negative `n` yields `null`.
 - `len` counts Unicode scalar values. `string()` writes numbers as the JSON writer does, `null` as
   an empty string and booleans as `true` or `false`, and yields `null` for lists and maps.
 - `pad(x, w)` takes a whole number and a width from 0 to 20 and puts the sign before the zeros, so
-  `pad(-5, 3)` is `-005`; fractions yield `null`.
-- `format_time` writes `a` as `AM` or `PM`, copies every non-token character literally, and always
-  reads token letters as tokens.
+  `pad(-5, 3)` is `-005`; fractions and widths outside 0 to 20 yield `null`.
+- `format_time` floors a fractional `ms`, writes `a` as `AM` or `PM`, copies every non-token
+  character literally, and always reads token letters as tokens, longest first. A letter that
+  starts no token, such as each `y` of `yy` or a lone `m` or `s`, is copied literally.
 - Strings accept the escapes `\\`, `\'`, `\"`, `\n`, `\t` and `\uXXXX`. Number literals are
   decimal, need a leading digit, and may have a fraction and an exponent.
 - Without `as` and `index_as`, a `repeat` binds `item` and `index`. Binding `state` or `env` is a
   schema error, and inner bindings shadow outer ones.
-- An expression that fails to parse fails the template load with `TWIDGET_ERROR_SCHEMA`.
+- An expression that fails to parse fails the template load with `TWIDGET_ERROR_SCHEMA`, and so
+  does a call to an unknown function, a call with the wrong number of arguments, or a name that
+  is neither `state`, `env` nor a binding in scope.
+- Nesting counts levels. Parentheses, a list, a call, a unary operator and a `?:` each hold their
+  operands one level deeper, as does a run of binary operators of one precedence (`a + b - c`) or
+  of `.name` and `[index]` steps (`state.lanes[0].title`), each run taken as a whole. Literals and
+  names are at level 0; 32 levels pass, and 33 fail with `TWIDGET_ERROR_BUDGET`.
 - Fuel costs one step per evaluated syntax node, plus one per list element or character produced.
 
 ### Resolver (M2.2 to M2.4)
