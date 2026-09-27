@@ -1,10 +1,10 @@
 # Live widgets spec v0
 
-As of 2026-09-27, revision v0.7. This repository copy leads the original design doc and is the
+As of 2026-09-27, revision v0.8. This repository copy leads the original design doc and is the
 source of truth for implementation. v0.1 adds the Implementation clarifications section at the end,
 v0.2 settles the defaults, required properties and paint values that section left open, v0.3
 settles the expression edge cases it left open, v0.4 and v0.5 settle the resolver's, v0.6 the
-reference layout's, and v0.7 the SVG fonts.
+reference layout's, v0.7 the SVG fonts, and v0.8 bounds the resolved tree's size.
 
 ## Overview
 
@@ -319,6 +319,7 @@ as ordinary text.
 | JSON nesting depth            | 64                                 |
 | Template nodes                | 2,000                              |
 | Resolved nodes                | 10,000                             |
+| Resolved tree size            | 1 MB as written                    |
 | Items per `repeat`            | 1,000                              |
 | Path commands across the tree | 20,000                             |
 | String length                 | 8 KB                               |
@@ -333,8 +334,8 @@ Failure behavior:
 
 - Parse, schema, budget or version errors render the message as ordinary text.
 - A failing expression yields `null`, and the property takes its default.
-- Exhausting fuel or the resolved-node budget during a resolve also renders the message as
-  ordinary text.
+- Exhausting fuel, the resolved-node budget or the resolved-tree size during a resolve also
+  renders the message as ordinary text.
 
 ## Crate C API
 
@@ -921,6 +922,14 @@ than the sections above, it governs, and each subsection names the milestone tha
   in.
 - SVGs set text in the generic `sans-serif` family, and `mono` text in `monospace`, at the
   fake-metric sizes, with `title` in weight 600.
+
+### Hardening (M6.1)
+
+- The resolved tree writes at most 1 MB (1,048,576 bytes), counted as `twidget_resolve` writes
+  it. The resolver adds up each node's written size as it builds the tree and fails with
+  `TWIDGET_ERROR_BUDGET` as soon as the total passes the limit, so no resolve builds or writes
+  more. Without it, one message could multiply its state across thousands of nodes: a
+  4,096-character envelope wrote 31 MB, and a 64 KB state 543 MB.
 
 ### Release (M7.1)
 
