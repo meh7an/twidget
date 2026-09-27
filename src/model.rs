@@ -3,7 +3,7 @@
 //! resolver fills in defaults and evaluates expressions later.
 
 pub(crate) mod check;
-mod color;
+pub(crate) mod color;
 mod load;
 mod table;
 

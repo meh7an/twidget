@@ -6,7 +6,7 @@
 //! relative to its own top-left corner, and the frames are then written in paint order, relative
 //! to the widget.
 
-mod text;
+pub(crate) mod text;
 
 use alloc::string::String;
 use alloc::vec::Vec;
@@ -75,17 +75,12 @@ pub struct Line {
 
 /// Lays out `resolved` in an available width of `available` units, right to left when `rtl`.
 pub fn frames(resolved: &Resolved, available: f64, rtl: bool) -> Frames {
-    let available = at_least_zero(available);
-    let width = match resolved.width {
-        Width::Fill => available,
-        Width::Units(units) => smaller(at_least_zero(units), available),
-    };
+    let (width, root) = lay_out(resolved, available, rtl);
     let mut nodes = Vec::new();
-    let height = match &resolved.root {
+    let height = match root {
         Some(root) => {
-            let laid = Layout { rtl }.node(root, width);
-            let height = laid.h;
-            laid.place(0.0, 0.0, &mut nodes);
+            let height = root.h;
+            root.place(0.0, 0.0, &mut nodes);
             height
         }
         None => 0.0,
@@ -95,6 +90,21 @@ pub fn frames(resolved: &Resolved, available: f64, rtl: bool) -> Frames {
         height,
         nodes,
     }
+}
+
+/// The widget's width, and its root laid out relative to the widget's corner, as the SVG
+/// renderer paints it.
+pub(crate) fn lay_out(resolved: &Resolved, available: f64, rtl: bool) -> (f64, Option<Laid<'_>>) {
+    let available = at_least_zero(available);
+    let width = match resolved.width {
+        Width::Fill => available,
+        Width::Units(units) => smaller(at_least_zero(units), available),
+    };
+    let root = resolved
+        .root
+        .as_ref()
+        .map(|root| Layout { rtl }.node(root, width));
+    (width, root)
 }
 
 impl Frames {
@@ -156,22 +166,36 @@ fn write_number(number: f64, out: &mut String) {
 }
 
 /// A node laid out relative to its own top-left corner.
-struct Laid<'r> {
-    key: &'r str,
-    w: f64,
-    h: f64,
-    lines: Option<Vec<Line>>,
-    /// The children in paint order, each with its corner relative to this node's.
-    children: Vec<(f64, f64, Laid<'r>)>,
+pub(crate) struct Laid<'r> {
+    pub(crate) node: &'r ResolvedNode,
+    pub(crate) w: f64,
+    pub(crate) h: f64,
+    /// The lines of a `text` or `text_field`, relative to the node's corner.
+    pub(crate) lines: Option<Vec<Line>>,
+    /// Where a `text_field`'s box sits, and which of its lines are the label's.
+    pub(crate) field: Option<Field>,
+    /// The children in paint order, each with its corner relative to this node's. A canvas has
+    /// only its frames here.
+    pub(crate) children: Vec<(f64, f64, Laid<'r>)>,
+}
+
+/// The parts of a laid-out `text_field`.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct Field {
+    /// How far below the field's corner its box starts.
+    pub(crate) top: f64,
+    /// How many of its lines, the first ones, are the label's.
+    pub(crate) labels: usize,
 }
 
 impl<'r> Laid<'r> {
     fn leaf(node: &'r ResolvedNode, w: f64, h: f64) -> Laid<'r> {
         Laid {
-            key: &node.key,
+            node,
             w,
             h,
             lines: None,
+            field: None,
             children: Vec::new(),
         }
     }
@@ -190,7 +214,7 @@ impl<'r> Laid<'r> {
                 .collect()
         });
         nodes.push(NodeBox {
-            key: String::from(self.key),
+            key: self.node.key.clone(),
             x,
             y,
             w: self.w,
@@ -256,10 +280,11 @@ impl Layout {
             y += h;
         }
         Laid {
-            key: &node.key,
+            node,
             w,
             h: y + bottom,
             lines: None,
+            field: None,
             children,
         }
     }
@@ -306,10 +331,11 @@ impl Layout {
             })
             .collect();
         Laid {
-            key: &node.key,
+            node,
             w,
             h: top + inner + bottom,
             lines: None,
+            field: None,
             children,
         }
     }
@@ -331,10 +357,11 @@ impl Layout {
             .map(|(x, child)| (x, top, child))
             .collect();
         Laid {
-            key: &node.key,
+            node,
             w,
             h: top + inner + bottom,
             lines: None,
+            field: None,
             children,
         }
     }
@@ -350,10 +377,11 @@ impl Layout {
             .map(|frame| self.frame(frame, scale))
             .collect();
         Laid {
-            key: &node.key,
+            node,
             w,
             h: view_h * scale,
             lines: None,
+            field: None,
             children,
         }
     }
@@ -388,10 +416,11 @@ impl Layout {
             .into_iter()
             .collect();
         let laid = Laid {
-            key: &frame.key,
+            node: frame,
             w,
             h,
             lines: None,
+            field: None,
             children,
         };
         (scaled("x"), scaled("y"), laid)
@@ -413,10 +442,11 @@ impl Layout {
         );
         let h = lines.len() as f64 * metrics.line_height;
         Laid {
-            key: &node.key,
+            node,
             w,
             h,
             lines: Some(lines),
+            field: None,
             children: Vec::new(),
         }
     }
@@ -442,16 +472,21 @@ impl Layout {
         let values = self.lines(shown, inner, body, None, "start");
         let least = number(node, "lines").map_or(1.0, |least| at_least_zero(least).floor());
         let rows = larger(values.len() as f64, least);
+        let field = Field {
+            top,
+            labels: lines.len(),
+        };
         lines.extend(values.into_iter().map(|line| Line {
             text: line.text,
             x: FIELD_PADDING + line.x,
             y: top + FIELD_PADDING + line.y,
         }));
         Laid {
-            key: &node.key,
+            node,
             w,
             h: top + rows * body.line_height + 2.0 * FIELD_PADDING,
             lines: Some(lines),
+            field: Some(field),
             children: Vec::new(),
         }
     }

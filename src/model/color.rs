@@ -1,7 +1,7 @@
 //! Colors: theme tokens with an optional alpha, fixed colors, and the two special values.
 
 /// The theme tokens the spec defines.
-const TOKENS: [&str; 17] = [
+pub(crate) const TOKENS: [&str; 17] = [
     "text",
     "text_secondary",
     "accent",

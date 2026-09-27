@@ -15,16 +15,18 @@ const ELLIPSIS: char = '\u{2026}';
 
 /// The metrics of one text style.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub(super) struct Metrics {
+pub(crate) struct Metrics {
+    /// The font size.
+    pub(crate) size: f64,
     /// How far every character advances.
-    pub(super) advance: f64,
+    pub(crate) advance: f64,
     /// How tall every line is.
-    pub(super) line_height: f64,
+    pub(crate) line_height: f64,
 }
 
 impl Metrics {
     /// The metrics of `style`, and of `body` for anything else.
-    pub(super) fn of(style: &str) -> Metrics {
+    pub(crate) fn of(style: &str) -> Metrics {
         let (size, share) = match style {
             "caption" => (12.0, 0.55),
             "title" => (16.0, 0.55),
@@ -33,13 +35,14 @@ impl Metrics {
             _ => (14.0, 0.55),
         };
         Metrics {
+            size,
             advance: size * share,
             line_height: size * 1.25,
         }
     }
 
     /// The width of `count` characters.
-    pub(super) fn width(self, count: usize) -> f64 {
+    pub(crate) fn width(self, count: usize) -> f64 {
         count as f64 * self.advance
     }
 
