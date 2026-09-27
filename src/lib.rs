@@ -24,6 +24,8 @@ mod c_api;
 mod error;
 pub mod expr;
 pub mod json;
+#[cfg(any(feature = "cli", feature = "wasm"))]
+pub mod layout;
 pub mod model;
 pub mod path;
 pub mod resolve;
