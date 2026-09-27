@@ -1,10 +1,10 @@
 # Live widgets spec v0
 
-As of 2026-09-27, revision v0.6. This repository copy leads the original design doc and is the
+As of 2026-09-27, revision v0.7. This repository copy leads the original design doc and is the
 source of truth for implementation. v0.1 adds the Implementation clarifications section at the end,
 v0.2 settles the defaults, required properties and paint values that section left open, v0.3
-settles the expression edge cases it left open, v0.4 and v0.5 settle the resolver's, and v0.6 the
-reference layout's.
+settles the expression edge cases it left open, v0.4 and v0.5 settle the resolver's, v0.6 the
+reference layout's, and v0.7 the SVG fonts.
 
 ## Overview
 
@@ -919,6 +919,8 @@ than the sections above, it governs, and each subsection names the milestone tha
   `--tz` in minutes, both defaulting to the fixed test environment. Its light and dark palettes
   approximate Telegram's default themes and are defined once, and generated SVGs are not checked
   in.
+- SVGs set text in the generic `sans-serif` family, and `mono` text in `monospace`, at the
+  fake-metric sizes, with `title` in weight 600.
 
 ### Release (M7.1)
 
