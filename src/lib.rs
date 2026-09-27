@@ -16,6 +16,11 @@
 extern crate alloc;
 
 pub mod budget;
+// The C API is the one module allowed unsafe code: every function it exports reads or writes
+// memory through pointers the caller passes.
+#[cfg(feature = "c-api")]
+#[allow(unsafe_code)]
+mod c_api;
 mod error;
 pub mod expr;
 pub mod json;

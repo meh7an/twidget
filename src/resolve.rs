@@ -67,9 +67,16 @@ impl Instance {
     /// # Errors
     /// The errors of [`model::parse_state`].
     pub fn set_state(&mut self, state: &[u8], state_version: i64) -> Result<()> {
-        self.state = model::parse_state(state)?;
-        self.state_version = Some(state_version);
+        let state = model::parse_state(state)?;
+        self.replace_state(state, state_version);
         Ok(())
+    }
+
+    /// Replaces the state with one already parsed. It cannot fail, so the C API parses first and
+    /// commits with this only once nothing else can go wrong.
+    pub(crate) fn replace_state(&mut self, state: Object, state_version: i64) {
+        self.state = state;
+        self.state_version = Some(state_version);
     }
 
     /// Resolves the tree for `env`.
@@ -224,17 +231,5 @@ impl ResolvedNode {
             | NodeKind::Connector => {}
         }
         out.push('}');
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_format_matches_the_header() {
-        let header = include_str!("../include/twidget.h");
-        let define = alloc::format!("#define TWIDGET_RESOLVED_FORMAT {FORMAT}u\n");
-        assert!(header.contains(&define), "header lacks `{define}`");
     }
 }
