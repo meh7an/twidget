@@ -1,9 +1,10 @@
 # Live widgets spec v0
 
-As of 2026-09-26, revision v0.5. This repository copy leads the original design doc and is the
+As of 2026-09-27, revision v0.6. This repository copy leads the original design doc and is the
 source of truth for implementation. v0.1 adds the Implementation clarifications section at the end,
 v0.2 settles the defaults, required properties and paint values that section left open, v0.3
-settles the expression edge cases it left open, and v0.4 and v0.5 settle the resolver's.
+settles the expression edge cases it left open, v0.4 and v0.5 settle the resolver's, and v0.6 the
+reference layout's.
 
 ## Overview
 
@@ -889,6 +890,31 @@ than the sections above, it governs, and each subsection names the milestone tha
 - A `text_field` is a `caption` label, a 4u gap, then a box with 10u padding, a 1u `divider`
   border and radius 8u.
 - `divider` is 1u thick in the reference layout, and borders never inset content; padding does.
+- Frames cover flow nodes, canvases and frames. Canvas shapes, including those a `use` or a
+  `connector` draws, stay out of them, in view-box units.
+- Each entry of `lines` is `{"text": …, "x": …, "y": …}`: the line's text and the top-left corner
+  of its line box, relative to the widget as node boxes are. Boxes are reported unclipped, since
+  painting clips to every container.
+- The fake measurer ends a line at `\n`. Lines break greedily at spaces, and a break consumes that
+  one space while other spaces count as characters. A word wider than its line starts a new line
+  and splits where it overflows, with at least one character per line. Empty text has no lines
+  and no height. A run of n characters fits a width when n × advance ≤ width + 1e-6, where the
+  advance is the font size times 0.55, or 0.6 for `mono`.
+- `max_lines` keeps the first lines. When it cuts text, the last kept line ends with `…` (U+2026),
+  dropping characters from its end until the line fits.
+- A `text_field`'s value, or its placeholder when the value is empty, is `body` text, and the box
+  holds at least `lines` lines of it. Its `lines` are the label's lines followed by the value's
+  or placeholder's. An empty label takes no space and no gap.
+- A `divider`'s box is its whole 9u slot: 4u, the 1u line, then 4u.
+- Inside a frame, `align` places the child on both axes within the padded box: `start` at the top
+  start, `center` in the middle, `end` at the bottom end, and `stretch` fills the box.
+- The root takes the widget's width, since its own `width` and `weight` only matter to a parent.
+  In a column, `stretch` acts as `start`.
+- Right to left, the nodes list keeps the resolved order and only positions mirror. `scroll_x`
+  content starts at the right edge and overflows to the left at scroll offset 0. Flow content
+  inside a frame follows the direction; only canvas geometry never mirrors.
+- Negative widths and heights count as 0, and when a row's weights sum to 0 or less its weighted
+  children get no width.
 - The CLI takes `--templates <dir>` (default `fixtures/templates`), `--now` in milliseconds and
   `--tz` in minutes, both defaulting to the fixed test environment. Its light and dark palettes
   approximate Telegram's default themes and are defined once, and generated SVGs are not checked
