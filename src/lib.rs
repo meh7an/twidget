@@ -27,6 +27,8 @@ pub mod json;
 #[cfg(any(feature = "cli", feature = "wasm"))]
 pub mod layout;
 pub mod model;
+#[cfg(test)]
+mod mutation;
 pub mod path;
 pub mod resolve;
 #[cfg(any(feature = "cli", feature = "wasm"))]

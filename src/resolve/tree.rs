@@ -9,7 +9,7 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use super::geometry::{self, Point, Rect};
-use super::{value, Resolved, ResolvedNode};
+use super::{document_size, value, Resolved, ResolvedNode};
 use crate::budget;
 use crate::expr::{Bindings, Env, Evaluator, Frame};
 use crate::json::{self, Object, Value};
@@ -22,6 +22,8 @@ pub(super) fn resolve(template: &Template, state: &Object, env: &Env) -> Result<
         symbols: &template.symbols,
         nodes: 0,
         path_commands: 0,
+        written: 0,
+        scratch: String::new(),
     };
     let mut top = Siblings::new(String::new(), None);
     resolver.child(&template.root, 0, &mut top, Bindings::default())?;
@@ -30,10 +32,17 @@ pub(super) fn resolve(template: &Template, state: &Object, env: &Env) -> Result<
     } else {
         None
     };
+    let root = top.nodes.pop();
+    let around = document_size(template.width, root.is_some());
+    let written = resolver.written.saturating_add(around);
+    if written > budget::RESOLVED_TREE.limit {
+        return Err(budget::RESOLVED_TREE.exceeded());
+    }
     Ok(Resolved {
         width: template.width,
-        root: top.nodes.pop(),
+        root,
         next_wakeup_ms,
+        written,
     })
 }
 
@@ -166,6 +175,10 @@ struct Resolver<'a> {
     nodes: usize,
     /// Normalized path commands drawn so far.
     path_commands: usize,
+    /// The bytes the finished nodes write, counted against the resolved-tree budget.
+    written: usize,
+    /// Where each finished node's properties are written to count them.
+    scratch: String,
 }
 
 impl Resolver<'_> {
@@ -272,13 +285,15 @@ impl Resolver<'_> {
             }
         }
         siblings.take(segment.text);
-        siblings.nodes.push(ResolvedNode {
+        let resolved = ResolvedNode {
             kind: node.kind,
             key,
             properties,
             children,
             child,
-        });
+        };
+        self.weigh(&resolved)?;
+        siblings.nodes.push(resolved);
         Ok(())
     }
 
@@ -337,13 +352,15 @@ impl Resolver<'_> {
             self.count(1)?;
             let shape_key = shapes.key(&shapes.unique(&shape_segment.text));
             shapes.take(shape_segment.text);
-            shapes.nodes.push(ResolvedNode {
+            let resolved = ResolvedNode {
                 kind: shape.kind,
                 key: shape_key,
                 properties: drawn,
                 children: Vec::new(),
                 child: None,
-            });
+            };
+            self.weigh(&resolved)?;
+            shapes.nodes.push(resolved);
         }
         if !shapes.nodes.is_empty() {
             siblings.take(segment.text);
@@ -390,6 +407,7 @@ impl Resolver<'_> {
             let mut parts = Vec::new();
             for mut part in connector_parts(connector, &nodes, &frames) {
                 if self.normalize(&mut part.properties)? {
+                    self.weigh(&part)?;
                     parts.push(part);
                 }
             }
@@ -444,6 +462,18 @@ impl Resolver<'_> {
         data.clear();
         path::write(&commands, data);
         Ok(true)
+    }
+
+    /// Counts a finished node's own written bytes against the resolved-tree budget. Its children
+    /// were counted as they finished, so the total grows toward what the tree writes and stops
+    /// the resolve as soon as it passes the limit.
+    fn weigh(&mut self, node: &ResolvedNode) -> Result<()> {
+        let size = node.own_size(&mut self.scratch);
+        self.written = self.written.saturating_add(size);
+        if self.written > budget::RESOLVED_TREE.limit {
+            return Err(budget::RESOLVED_TREE.exceeded());
+        }
+        Ok(())
     }
 
     /// Counts resolved nodes against the budget.

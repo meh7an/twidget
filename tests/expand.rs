@@ -400,10 +400,12 @@ fn test_expanded_nodes_count_toward_the_budget() {
             .resolve(&Env::TEST)
     };
     // The canvas and ten shapes per item.
-    assert_eq!(nodes(&result(999).unwrap()).len(), 9_991);
+    assert_eq!(nodes(&result(400).unwrap()).len(), 4_001);
+    // Shapes write about 190 bytes each, so a large expansion passes the resolved-tree size, 1 MB,
+    // well before the 10,000 resolved nodes.
     assert!(matches!(
         result(1000),
-        Err(Error::Budget { budget: name, .. }) if name == budget::RESOLVED_NODES.name
+        Err(Error::Budget { budget: name, .. }) if name == budget::RESOLVED_TREE.name
     ));
 }
 

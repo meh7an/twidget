@@ -58,6 +58,12 @@ pub const RESOLVED_NODES: Budget = Budget {
     limit: 10_000,
 };
 
+/// One resolved tree, in bytes as `twidget_resolve` writes it: 1 MB.
+pub const RESOLVED_TREE: Budget = Budget {
+    name: "resolved tree size",
+    limit: 1024 * 1024,
+};
+
 /// Items one `repeat` expands into.
 pub const ITEMS_PER_REPEAT: Budget = Budget {
     name: "items per repeat",

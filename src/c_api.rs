@@ -1182,4 +1182,93 @@ mod tests {
             );
         }
     }
+
+    /// Both calls of a resolve or summary as apps make them: the size, then the bytes.
+    fn asked_twice(mut call: impl FnMut(*mut u8, usize, &mut usize) -> i32) -> [i32; 2] {
+        let mut len = 0;
+        let query = call(ptr::null_mut(), 0, &mut len);
+        let mut out = alloc::vec![0; len];
+        let copy = call(out.as_mut_ptr(), len, &mut len);
+        [query, copy]
+    }
+
+    /// Runs a mutated case through every exported function that reads outside input, and returns
+    /// every status they answered with.
+    fn exercise(case: &crate::mutation::Case) -> Vec<i32> {
+        let mut statuses = Vec::new();
+        let mut id = [0; 80];
+        let (mut id_len, mut version, mut status) = (0, 0, 1);
+        // SAFETY: every pointer is to a live local or buffer with the size passed along, or NULL
+        // with 0, and each handle is live until its one drop.
+        unsafe {
+            statuses.push(twidget_envelope_template_ref(
+                case.envelope.as_ptr(),
+                case.envelope.len(),
+                id.as_mut_ptr(),
+                id.len(),
+                &mut id_len,
+                &mut version,
+            ));
+            let template = match &case.template {
+                Some(json) => {
+                    let template = twidget_template_new(json.as_ptr(), json.len(), &mut status);
+                    statuses.push(status);
+                    template
+                }
+                None => ptr::null_mut(),
+            };
+            let envelope = &case.envelope;
+            let instance =
+                twidget_instance_new(envelope.as_ptr(), envelope.len(), template, &mut status);
+            statuses.push(status);
+            if !instance.is_null() {
+                let rounds = [&crate::mutation::ENVS[..], &crate::mutation::ENVS[..1]];
+                for round in rounds {
+                    for env in round {
+                        let env = c_env(*env);
+                        let mut wakeup = 0;
+                        statuses.extend(asked_twice(|out, cap, len| {
+                            twidget_resolve(instance, &env, out, cap, len, &mut wakeup)
+                        }));
+                        statuses.extend(asked_twice(|out, cap, len| {
+                            twidget_summary(instance, &env, out, cap, len)
+                        }));
+                    }
+                    if round.len() > 1 {
+                        let state = &case.state;
+                        let set =
+                            twidget_instance_set_state(instance, state.as_ptr(), state.len(), 2);
+                        statuses.push(set);
+                    }
+                }
+            }
+            twidget_instance_drop(instance);
+            twidget_template_drop(template);
+        }
+        statuses
+    }
+
+    #[test]
+    fn test_mutated_fixtures_through_the_symbols_answer_only_header_statuses() {
+        let mut unexpected = Vec::new();
+        let (mut total, mut failures) = (0_usize, 0_usize);
+        for case in crate::mutation::cases(100) {
+            total += 1;
+            for status in exercise(&case) {
+                // A contained panic answers INTERNAL, which a well-formed call must never see.
+                if !(Status::NotFound.code()..=OK).contains(&status) {
+                    unexpected.push(format!("{} seed {:#x}: {status}", case.fixture, case.seed));
+                }
+                if status != OK {
+                    failures += 1;
+                }
+            }
+        }
+        assert_eq!(total, 800);
+        assert!(unexpected.is_empty(), "unexpected statuses: {unexpected:?}");
+        assert!(
+            failures > total,
+            "only {failures} failures in {total} cases"
+        );
+    }
 }

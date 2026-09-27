@@ -559,14 +559,17 @@ fn test_path_data_resolves_normalized_or_drops_out() {
 
 #[test]
 fn test_normalized_path_commands_count_toward_the_budget() {
-    // Each arc sweeps 300 degrees and becomes four cubics, so the path's 103 segments normalize
-    // to 400 commands, and 50 copies reach the budget exactly.
+    // Each arc sweeps 300 degrees and becomes four cubics, so the path's 370 segments, ten arcs
+    // and 359 lines after the move, normalize to 400 commands, and 50 copies reach the budget
+    // exactly. Most are short lines, since a cubic writes about 110 bytes and the tree must stay
+    // within its 1 MB.
     let d = format!(
-        "M0 0 A{}5 5 0 115 0 L1 1 2 2 3 3",
-        "5 5 0 115 0 5 5 0 110 0 ".repeat(49)
+        "M0 0 A{}L{}",
+        "5 5 0 115 0 5 5 0 110 0 ".repeat(5),
+        "1 1 ".repeat(359)
     );
     let segments = path::parse(&d).unwrap();
-    assert_eq!(segments.len(), 103);
+    assert_eq!(segments.len(), 370);
     assert_eq!(path::normalize(&segments).len(), 400);
     // The copies are paths of their own, or the shape of a symbol drawn by each `use`.
     let symbols = format!(
@@ -590,6 +593,42 @@ fn test_normalized_path_commands_count_toward_the_budget() {
             budget::PATH_COMMANDS.name
         );
     }
+}
+
+#[test]
+fn test_resolved_tree_of_1_mb_passes_and_one_byte_more_fails() {
+    // Texts reading a 4 KB string fill most of the megabyte, and one more text, of a length
+    // worked out from the rest, lands the written tree on it exactly.
+    let template = r#"{"spec": 1, "id": "tg.big", "version": 1, "root": {"type": "column",
+        "children": [{"type": "repeat", "each": {"=": "range(state.n)"},
+        "child": {"type": "text", "text": {"=": "state.big"}}},
+        {"type": "text", "text": {"=": "state.tail"}}]}}"#;
+    let template = Arc::new(Template::parse(template.as_bytes()).unwrap());
+    let envelope = r#"{"tgw": 1, "template_ref": {"id": "tg.big", "version": 1}, "state": {}}"#;
+    let written = |n: usize, tail: usize| {
+        let bundled = Some(Arc::clone(&template));
+        let mut instance = Instance::new(envelope.as_bytes(), bundled).unwrap();
+        let state = format!(
+            r#"{{"n": {n}, "big": "{}", "tail": "{}"}}"#,
+            "x".repeat(4096),
+            "y".repeat(tail)
+        );
+        instance.set_state(state.as_bytes(), 2).unwrap();
+        instance
+            .resolve(&Env::TEST)
+            .map(|resolved| resolved.json().len())
+    };
+    let limit = budget::RESOLVED_TREE.limit;
+    let base = written(0, 0).unwrap();
+    let per_text = written(1, 0).unwrap() - base;
+    let n = (limit - base) / per_text;
+    let tail = limit - written(n, 0).unwrap();
+    assert!(tail < per_text);
+    assert_eq!(written(n, tail), Ok(limit));
+    assert!(matches!(
+        written(n, tail + 1),
+        Err(Error::Budget { budget, .. }) if budget == budget::RESOLVED_TREE.name
+    ));
 }
 
 fn wakeup(fields: &str, root: &str, now_ms: i64) -> Option<i64> {

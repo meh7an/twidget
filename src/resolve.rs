@@ -137,28 +137,78 @@ pub struct Resolved {
     pub root: Option<ResolvedNode>,
     /// The server time to resolve again at, when the tree read `env.now`.
     pub next_wakeup_ms: Option<i64>,
+    /// How many bytes [`Resolved::json`] writes, counted while the tree was built.
+    pub(crate) written: usize,
 }
 
 impl Resolved {
     /// The tree as resolved JSON, as `docs/RESOLVED.md` describes it: compact, with members in a
     /// fixed order and numbers in their shortest round-trip form, so equal trees give equal
-    /// bytes.
+    /// bytes. It is at most 1 MB, the resolved-tree budget.
     pub fn json(&self) -> String {
-        let mut out = String::new();
-        out.push_str("{\"tgw_resolved\":");
-        json::write(&Value::Number(f64::from(FORMAT)), &mut out);
-        out.push_str(",\"width\":");
-        match self.width {
-            Width::Fill => out.push_str("\"fill\""),
-            Width::Units(units) => json::write(&Value::Number(units), &mut out),
-        }
-        out.push_str(",\"root\":");
+        let mut out = String::with_capacity(self.written);
+        write_head(self.width, &mut out);
         match &self.root {
             Some(root) => root.write(&mut out),
-            None => out.push_str("null"),
+            None => out.push_str(NO_NODE),
         }
         out.push('}');
         out
+    }
+}
+
+/// What a tree of `width` writes around its root: the head, the closing brace, and `null` when it
+/// has no root.
+pub(crate) fn document_size(width: Width, has_root: bool) -> usize {
+    let mut head = String::new();
+    write_head(width, &mut head);
+    let root = if has_root { 0 } else { NO_NODE.len() };
+    head.len() + root + "}".len()
+}
+
+/// Appends the document's members up to the root's value.
+fn write_head(width: Width, out: &mut String) {
+    out.push_str("{\"tgw_resolved\":");
+    json::write(&Value::Number(f64::from(FORMAT)), out);
+    out.push_str(",\"width\":");
+    match width {
+        Width::Fill => out.push_str("\"fill\""),
+        Width::Units(units) => json::write(&Value::Number(units), out),
+    }
+    out.push_str(",\"root\":");
+}
+
+/// A missing root or frame child, as written.
+const NO_NODE: &str = "null";
+
+/// What opens a container's children, as written.
+const CHILDREN: &str = ",\"children\":[";
+
+/// What comes before a frame's child, as written.
+const CHILD: &str = ",\"child\":";
+
+/// What a node of a type writes after its properties.
+enum Holds {
+    Children,
+    Child,
+    Nothing,
+}
+
+fn holds(kind: NodeKind) -> Holds {
+    match kind {
+        NodeKind::Column | NodeKind::Row | NodeKind::ScrollX | NodeKind::Canvas => Holds::Children,
+        NodeKind::Frame => Holds::Child,
+        NodeKind::Repeat
+        | NodeKind::Text
+        | NodeKind::TextField
+        | NodeKind::Chart
+        | NodeKind::Divider
+        | NodeKind::Rect
+        | NodeKind::Ellipse
+        | NodeKind::Line
+        | NodeKind::Path
+        | NodeKind::Use
+        | NodeKind::Connector => Holds::Nothing,
     }
 }
 
@@ -187,9 +237,23 @@ impl ResolvedNode {
             .map(|(_, value)| value)
     }
 
-    /// Appends the node as resolved JSON. The recursion follows the template's nesting, which
-    /// the JSON nesting budget bounds, since expansion only ever adds siblings.
-    fn write(&self, out: &mut String) {
+    /// The bytes the node writes itself, as [`Resolved::json`] writes it: its type, key and
+    /// properties, its brackets and the commas between its children, but not the children,
+    /// whose own sizes count on their own. `scratch` is where the properties are written.
+    pub(crate) fn own_size(&self, scratch: &mut String) -> usize {
+        scratch.clear();
+        self.write_own(scratch);
+        let holding = match holds(self.kind) {
+            Holds::Children => CHILDREN.len() + "]".len() + self.children.len().saturating_sub(1),
+            Holds::Child if self.child.is_none() => CHILD.len() + NO_NODE.len(),
+            Holds::Child => CHILD.len(),
+            Holds::Nothing => 0,
+        };
+        scratch.len() + holding + "}".len()
+    }
+
+    /// Appends the opening brace, the type, the key and the properties.
+    fn write_own(&self, out: &mut String) {
         out.push_str("{\"type\":");
         json::write_string(self.kind.name(), out);
         out.push_str(",\"key\":");
@@ -200,9 +264,15 @@ impl ResolvedNode {
             out.push(':');
             json::write(value, out);
         }
-        match self.kind {
-            NodeKind::Column | NodeKind::Row | NodeKind::ScrollX | NodeKind::Canvas => {
-                out.push_str(",\"children\":[");
+    }
+
+    /// Appends the node as resolved JSON. The recursion follows the template's nesting, which
+    /// the JSON nesting budget bounds, since expansion only ever adds siblings.
+    fn write(&self, out: &mut String) {
+        self.write_own(out);
+        match holds(self.kind) {
+            Holds::Children => {
+                out.push_str(CHILDREN);
                 for (index, child) in self.children.iter().enumerate() {
                     if index > 0 {
                         out.push(',');
@@ -211,24 +281,14 @@ impl ResolvedNode {
                 }
                 out.push(']');
             }
-            NodeKind::Frame => {
-                out.push_str(",\"child\":");
+            Holds::Child => {
+                out.push_str(CHILD);
                 match &self.child {
                     Some(child) => child.write(out),
-                    None => out.push_str("null"),
+                    None => out.push_str(NO_NODE),
                 }
             }
-            NodeKind::Repeat
-            | NodeKind::Text
-            | NodeKind::TextField
-            | NodeKind::Chart
-            | NodeKind::Divider
-            | NodeKind::Rect
-            | NodeKind::Ellipse
-            | NodeKind::Line
-            | NodeKind::Path
-            | NodeKind::Use
-            | NodeKind::Connector => {}
+            Holds::Nothing => {}
         }
         out.push('}');
     }
