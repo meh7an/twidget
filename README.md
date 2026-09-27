@@ -7,7 +7,7 @@ natively, along with when to resolve again and a summary for chat lists.
 
 The contracts live in this repository:
 
-- [`docs/SPEC.md`](docs/SPEC.md), the behavior, revision v0.8.
+- [`docs/SPEC.md`](docs/SPEC.md), the behavior, revision v0.9.
 - [`include/twidget.h`](include/twidget.h), the C ABI, version 1.
 - [`docs/RESOLVED.md`](docs/RESOLVED.md), the resolved tree's JSON, format 1.
 
@@ -35,13 +35,40 @@ scripts/check.sh
 | `cli`   | The `twidget-cli` binary, the reference layout and the SVG preview                    |
 | `wasm`  | The reference layout and the SVG preview, kept for a WebAssembly build                |
 
-The static library an app links:
+A static library for this machine:
 
 ```sh
 cargo rustc --lib --release --locked --features c-api --crate-type staticlib
 ```
 
 It lands at `target/release/libtwidget.a` and exports exactly the ten functions of the header.
+
+## Release libraries
+
+The libraries the apps ship are built on a Mac into `prebuild/`, which git ignores. Telegram
+Desktop links `prebuild/lib/macos/libtwidget.a`, one universal library for arm64 and x86_64 built
+for macOS 10.13 and later. Telegram Android links `prebuild/lib/<ABI>/libtwidget.a` for
+`armeabi-v7a`, `arm64-v8a`, `x86` and `x86_64`, built with NDK 27.2.12479018 for API level 21.
+Windows and Linux libraries come from Telegram Desktop's `prepare.py` instead.
+
+```sh
+cargo install cargo-ndk@4.1.2 --locked
+scripts/build-macos.sh
+scripts/build-android.sh
+scripts/check-prebuild.sh
+```
+
+A script missing a Rust target names the `rustup target add` command that installs it. The Android
+script takes the NDK from the Android SDK at `$ANDROID_HOME`, or at `~/Library/Android/sdk` when
+that is unset. `prebuild/BUILD_INFO` has a line for each library with the commit it was built from,
+marked `-dirty` when the tree had uncommitted changes, the rustc version, and the macOS version or
+the NDK version and API level it targets.
+
+`scripts/check-prebuild.sh` confirms that the macOS library holds both architectures and that every
+library defines each function of the header. It then builds `tests/c/resolve.c` with the header
+against the macOS library, resolves every fixture through it on each architecture the Mac can run,
+and compares the trees with the goldens. Every setting, from the crate and its features to the NDK
+version, sits at the top of `scripts/prebuild.sh`, which each script sources.
 
 ## The command line
 
