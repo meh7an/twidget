@@ -1,10 +1,11 @@
 # Live widgets spec v0
 
-As of 2026-09-27, revision v0.8. This repository copy leads the original design doc and is the
+As of 2026-09-27, revision v0.9. This repository copy leads the original design doc and is the
 source of truth for implementation. v0.1 adds the Implementation clarifications section at the end,
 v0.2 settles the defaults, required properties and paint values that section left open, v0.3
 settles the expression edge cases it left open, v0.4 and v0.5 settle the resolver's, v0.6 the
-reference layout's, v0.7 the SVG fonts, and v0.8 bounds the resolved tree's size.
+reference layout's, v0.7 the SVG fonts, v0.8 bounds the resolved tree's size, and v0.9 settles the
+release artifacts.
 
 ## Overview
 
@@ -933,7 +934,18 @@ than the sections above, it governs, and each subsection names the milestone tha
 
 ### Release (M7.1)
 
-Mehran decides these when M7.1 starts: build hosts, the Windows script's form, the Android API
-level and NDK version (from Telegram Android's Gradle files), and where `prebuild/` output goes.
-For the demo, a macOS universal library plus the four Android ABIs, all built on the Mac, are
-enough.
+- This repository builds for macOS and Android only, both on the Mac. macOS gets one universal
+  `libtwidget.a`, `aarch64-apple-darwin` and `x86_64-apple-darwin` joined by `lipo`, built with
+  `MACOSX_DEPLOYMENT_TARGET=10.13` as Telegram Desktop's `prepare.py` builds tlottie.
+- Android gets a `libtwidget.a` for each of `armeabi-v7a`, `arm64-v8a`, `x86` and `x86_64`, built
+  with NDK 27.2.12479018 for API level 21, as Telegram Android's `TMessagesProj/build.gradle` sets
+  them: `minSdkVersion 21`, `-DANDROID_PLATFORM=android-21` and `ndkVersion "27.2.12479018"`.
+- Windows and Linux are deferred. They will come through a twidget stage in Telegram Desktop's
+  `prepare.py`, cloned from its tlottie stage, and not through scripts here, so this repository
+  has no Windows script; `prepare.py` runs its Windows steps as cmd batch. The Windows targets are
+  `i686-win7-windows-msvc` and `x86_64-win7-windows-msvc`, built with
+  `-Z build-std=std,panic_abort`, and `aarch64-pc-windows-msvc`, all with `+crt-static`, so
+  `catch_unwind` cannot catch panics there and the lint policy is the only guarantee.
+- Builds write to `prebuild/`, which this repository ignores: `prebuild/lib/<ABI>/libtwidget.a` for
+  the four Android ABIs, `prebuild/lib/macos/libtwidget.a`, and `prebuild/BUILD_INFO`, which
+  records the twidget commit, the rustc version, the NDK version and the API level.
