@@ -7,7 +7,7 @@ natively, along with when to resolve again and a summary for chat lists.
 
 The contracts live in this repository:
 
-- [`docs/SPEC.md`](docs/SPEC.md), the behavior, revision v0.9.
+- [`docs/SPEC.md`](docs/SPEC.md), the behavior, revision v0.10.
 - [`include/twidget.h`](include/twidget.h), the C ABI, version 1.
 - [`docs/RESOLVED.md`](docs/RESOLVED.md), the resolved tree's JSON, format 1.
 
@@ -59,10 +59,20 @@ scripts/check-prebuild.sh
 ```
 
 A script missing a Rust target names the `rustup target add` command that installs it. The Android
-script takes the NDK from the Android SDK at `$ANDROID_HOME`, or at `~/Library/Android/sdk` when
-that is unset. `prebuild/BUILD_INFO` has a line for each library with the commit it was built from,
+script and the check take the NDK from the Android SDK at `$ANDROID_HOME`, or at
+`~/Library/Android/sdk` when that is unset. `prebuild/BUILD_INFO` has a line for each library with the commit it was built from,
 marked `-dirty` when the tree had uncommitted changes, the rustc version, and the macOS version or
-the NDK version and API level it targets.
+the NDK version and API level it targets, and for Android the number of global symbols it defines,
+`exports=10`.
+
+Each Android library is one object whose only global symbols are the header's ten functions.
+Telegram Android links it into one shared library beside tlottie and its wallet engine, Rust
+libraries with their own `rust_eh_personality` and std symbols, so the build script prelinks every
+member of cargo's archive with the NDK's `ld.lld -r`, makes every other definition local with
+`llvm-objcopy`, and removes the section groups through which the app's linker could swap twidget's
+personality routine for another library's. `scripts/check-prebuild.sh` confirms that each Android
+library is that one object, then links `tests/c/resolve.c` for each ABI beside a stand-in
+`rust_eh_personality` and checks that twidget's unwind entries still name its own routine.
 
 `scripts/check-prebuild.sh` confirms that the macOS library holds both architectures and that every
 library defines each function of the header. It then builds `tests/c/resolve.c` with the header
