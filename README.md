@@ -7,7 +7,7 @@ natively, along with when to resolve again and a summary for chat lists.
 
 The contracts live in this repository:
 
-- [`docs/SPEC.md`](docs/SPEC.md), the behavior, revision v0.11.
+- [`docs/SPEC.md`](docs/SPEC.md), the behavior, revision v0.12.
 - [`include/twidget.h`](include/twidget.h), the C ABI, version 1.
 - [`docs/RESOLVED.md`](docs/RESOLVED.md), the resolved tree's JSON, format 1.
 
@@ -176,8 +176,10 @@ the call has no effect.
 
 **Painting.** The resolved format is documented in [`docs/RESOLVED.md`](docs/RESOLVED.md). Colors
 arrive as theme tokens, so a theme change is a repaint with no crate call, and keys stay stable
-across resolves, so moved nodes can animate. To test a native layout, inject the fake text
-metrics of the spec's conformance section and compare against `fixtures/expected/frames`.
+across resolves, so moved nodes can animate. Every container clips its content to its box, except
+that a `scroll_x`'s slid content may draw sideways into free space up to the bubble's edges, as the
+spec's *Scroll strip bleed* defines. To test a native layout, inject the fake text metrics of the
+spec's conformance section and compare against `fixtures/expected/frames`.
 
 ## License
 

@@ -5,8 +5,8 @@ source of truth for implementation. v0.1 adds the Implementation clarifications 
 v0.2 settles the defaults, required properties and paint values that section left open, v0.3
 settles the expression edge cases it left open, v0.4 and v0.5 settle the resolver's, v0.6 the
 reference layout's, v0.7 the SVG fonts, v0.8 bounds the resolved tree's size, v0.9 settles the
-release artifacts, v0.10 makes each Android library export only the C API, and v0.11 says whose
-direction `env.rtl` follows.
+release artifacts, v0.10 makes each Android library export only the C API, v0.11 says whose
+direction `env.rtl` follows, and v0.12 lets slid `scroll_x` content draw past the strip.
 
 ## Overview
 
@@ -972,3 +972,23 @@ than the sections above, it governs, and each subsection names the milestone tha
   counts, later `tgw` blocks and other code blocks included.
 - Clients decide the direction before resolving, since `env.rtl` is a resolve input, and the crate
   takes it as given.
+
+### Scroll strip bleed (Telegram Android M2.1)
+
+- A `scroll_x`'s content may draw past the strip's left and right edges, within the strip's own top
+  and bottom, so slid content reaches the bubble's edges as Telegram's rich-message tables do. This
+  is the one exception to *Layout*'s "every container clips to its bounds".
+- On each side, the bleed's limit starts at the strip's edge and moves outward one ancestor at a
+  time. An ancestor leaves a side free when it is a `column`, or a `row` or `scroll_x` in which the
+  strip's branch is the outermost child on that side as laid out on screen. The limit then moves to
+  that ancestor's outer edge on that side, padding and any space beside the branch included.
+- The walk stops on a side at the first ancestor that does not leave it free, keeping the limit
+  where it is. It stops on both sides at the first ancestor that paints a `background` or `border`
+  or is a `frame`, and that ancestor's bounds, rounded by its `radius`, also clip the bleed.
+- When the walk passes the widget's root on a side, the limit is the bubble's edge on that side.
+  How far that edge is and the bubble's shape are the client's.
+- Layout is unchanged: content starts where the layout puts it, and scroll offsets and frames JSON
+  stay as they are. At offset 0, content overflowing the strip's far end shows in the free space
+  beside it instead of being cut at the strip.
+- The reference SVG preview still clips each strip at its own box, since a widget alone has no
+  bubble.
