@@ -7,7 +7,7 @@ natively, along with when to resolve again and a summary for chat lists.
 
 The contracts live in this repository:
 
-- [`docs/SPEC.md`](docs/SPEC.md), the behavior, revision v0.13.
+- [`docs/SPEC.md`](docs/SPEC.md), the behavior, revision v0.14.
 - [`include/twidget.h`](include/twidget.h), the C ABI, version 1.
 - [`docs/RESOLVED.md`](docs/RESOLVED.md), the resolved tree's JSON, format 1.
 
@@ -168,7 +168,9 @@ if (status != TWIDGET_OK) {
 `twidget_instance_set_state`; a failure leaves the previous state in place.
 
 **Summaries.** Use `twidget_summary`, with the same buffer protocol, for the chat list, reply
-previews and notifications; it is empty when the template has none.
+previews and notifications; it is empty when the template has none. When it is empty or only
+whitespace, show the message's text outside the `tgw` block, trimmed, and when that is empty too, a
+fixed label such as "Widget". Compute it when the message loads and again on an edit.
 
 **Logs.** `twidget_last_error` copies the calling thread's most recent failure, for logs and not
 for users. A defect inside the crate is contained and reported as `TWIDGET_ERROR_INTERNAL`, and

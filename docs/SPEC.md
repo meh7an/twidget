@@ -6,8 +6,8 @@ v0.2 settles the defaults, required properties and paint values that section lef
 settles the expression edge cases it left open, v0.4 and v0.5 settle the resolver's, v0.6 the
 reference layout's, v0.7 the SVG fonts, v0.8 bounds the resolved tree's size, v0.9 settles the
 release artifacts, v0.10 makes each Android library export only the C API, v0.11 says whose
-direction `env.rtl` follows, v0.12 lets slid `scroll_x` content draw past the strip, and v0.13
-takes `env.rtl` from the widget's own text instead.
+direction `env.rtl` follows, v0.12 lets slid `scroll_x` content draw past the strip, v0.13 takes
+`env.rtl` from the widget's own text instead, and v0.14 says what previews show without a summary.
 
 ## Overview
 
@@ -999,3 +999,18 @@ than the sections above, it governs, and each subsection names the milestone tha
   beside it instead of being cut at the strip.
 - The reference SVG preview still clips each strip at its own box, since a widget alone has no
   bubble.
+
+### Previews (Telegram Android M2.7)
+
+- The chat list, reply previews and notifications show the text `twidget_summary` writes. When that
+  text is empty or only whitespace, they show the message's fallback text instead, which the author
+  wrote for unpatched clients, such as "Kanban: 3 lanes". When the fallback text is empty too, the
+  client shows a fixed label of its own, such as a localized "Widget".
+- The fallback text is the message's text with the envelope's code block cut out, the text before
+  the block and then the text after it, trimmed of whitespace at both ends. Later `tgw` blocks and
+  other code blocks stay in it.
+- A failing `twidget_summary` does not fall back: as for any failure, the preview shows the message
+  as ordinary text.
+- The client computes the summary when the message loads and again on an edit, since
+  `twidget_summary` reports no wake-up, so a summary that reads `env.now`, such as the clock's,
+  keeps its load time. A client may refresh it sooner.
