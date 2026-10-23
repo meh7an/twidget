@@ -7,7 +7,7 @@ natively, along with when to resolve again and a summary for chat lists.
 
 The contracts live in this repository:
 
-- [`docs/SPEC.md`](docs/SPEC.md), the behavior, revision v0.10.
+- [`docs/SPEC.md`](docs/SPEC.md), the behavior, revision v0.11.
 - [`include/twidget.h`](include/twidget.h), the C ABI, version 1.
 - [`docs/RESOLVED.md`](docs/RESOLVED.md), the resolved tree's JSON, format 1.
 
@@ -60,10 +60,10 @@ scripts/check-prebuild.sh
 
 A script missing a Rust target names the `rustup target add` command that installs it. The Android
 script and the check take the NDK from the Android SDK at `$ANDROID_HOME`, or at
-`~/Library/Android/sdk` when that is unset. `prebuild/BUILD_INFO` has a line for each library with the commit it was built from,
-marked `-dirty` when the tree had uncommitted changes, the rustc version, and the macOS version or
-the NDK version and API level it targets, and for Android the number of global symbols it defines,
-`exports=10`.
+`~/Library/Android/sdk` when that is unset. `prebuild/BUILD_INFO` has a line for each library
+with the commit it was built from, marked `-dirty` when the tree had uncommitted changes, the rustc
+version, and the macOS version or the NDK version and API level it targets, and for Android the
+number of global symbols it defines, `exports=10`.
 
 Each Android library is one object whose only global symbols are the header's ten functions.
 Telegram Android links it into one shared library beside tlottie and its wallet engine, Rust
@@ -134,8 +134,10 @@ own reference, so the app may drop the template first. An instance is not thread
 one from one thread at a time, and free it with `twidget_instance_drop`, which accepts NULL.
 
 **Resolving.** Fill a `TWidgetEnv` with `struct_size = sizeof(TWidgetEnv)`, the server-synced time,
-the viewer's UTC offset, and whether the theme is dark and the layout right to left. Every output
-buffer works the same way: pass NULL with capacity 0 to learn the size, which comes back with
+the viewer's UTC offset, whether the theme is dark, and whether the widget lays out right to left:
+it does when the first strong character of the message's text outside the `tgw` block is right to
+left, and it follows the app's direction when that text has none. Every output buffer works the
+same way: pass NULL with capacity 0 to learn the size, which comes back with
 `TWIDGET_ERROR_BUFFER_TOO_SMALL`, then call again with a buffer that fits and the same env, and
 the cached result is copied without evaluating again. Output is UTF-8 without a terminating NUL,
 written only on success. A resolved tree is at most 1 MB, and identical bytes mean nothing changed,

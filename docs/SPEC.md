@@ -1,11 +1,12 @@
 # Live widgets spec v0
 
-As of 2026-10-23, revision v0.10. This repository copy leads the original design doc and is the
+As of 2026-10-23, revision v0.11. This repository copy leads the original design doc and is the
 source of truth for implementation. v0.1 adds the Implementation clarifications section at the end,
 v0.2 settles the defaults, required properties and paint values that section left open, v0.3
 settles the expression edge cases it left open, v0.4 and v0.5 settle the resolver's, v0.6 the
 reference layout's, v0.7 the SVG fonts, v0.8 bounds the resolved tree's size, v0.9 settles the
-release artifacts, and v0.10 makes each Android library export only the C API.
+release artifacts, v0.10 makes each Android library export only the C API, and v0.11 says whose
+direction `env.rtl` follows.
 
 ## Overview
 
@@ -955,3 +956,19 @@ than the sections above, it governs, and each subsection names the milestone tha
   the four Android ABIs, `prebuild/lib/macos/libtwidget.a`, and `prebuild/BUILD_INFO`, which
   records the twidget commit, the rustc version, the NDK version and the API level, and for
   Android the number of global symbols, `exports=10`.
+
+### Layout direction (Telegram Android M2.1)
+
+- `env.rtl` gives the widget's own direction, taken from its message rather than from the app, as
+  Telegram aligns a Persian text message in an English app. A widget lays out right to left when
+  the first strong character of its message's fallback text, the text outside the `tgw` block, is
+  right to left, and left to right when that character is left to right. When the fallback text
+  has no strong character, the widget follows the app's layout direction.
+- A strong character is one of bidi class L, R or AL, found the way rules P2 and P3 of the Unicode
+  Bidirectional Algorithm (UAX #9) find a paragraph's direction: characters between an isolate
+  initiator and its matching PDI are skipped, and R and AL mean right to left.
+- The fallback text is read in message order, the text before the block and then the text after
+  it, so a strong character before the block decides first. Everything but the envelope's block
+  counts, later `tgw` blocks and other code blocks included.
+- Clients decide the direction before resolving, since `env.rtl` is a resolve input, and the crate
+  takes it as given.
