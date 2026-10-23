@@ -7,7 +7,7 @@ natively, along with when to resolve again and a summary for chat lists.
 
 The contracts live in this repository:
 
-- [`docs/SPEC.md`](docs/SPEC.md), the behavior, revision v0.12.
+- [`docs/SPEC.md`](docs/SPEC.md), the behavior, revision v0.13.
 - [`include/twidget.h`](include/twidget.h), the C ABI, version 1.
 - [`docs/RESOLVED.md`](docs/RESOLVED.md), the resolved tree's JSON, format 1.
 
@@ -134,14 +134,14 @@ own reference, so the app may drop the template first. An instance is not thread
 one from one thread at a time, and free it with `twidget_instance_drop`, which accepts NULL.
 
 **Resolving.** Fill a `TWidgetEnv` with `struct_size = sizeof(TWidgetEnv)`, the server-synced time,
-the viewer's UTC offset, whether the theme is dark, and whether the widget lays out right to left:
-it does when the first strong character of the message's text outside the `tgw` block is right to
-left, and it follows the app's direction when that text has none. Every output buffer works the
-same way: pass NULL with capacity 0 to learn the size, which comes back with
-`TWIDGET_ERROR_BUFFER_TOO_SMALL`, then call again with a buffer that fits and the same env, and
-the cached result is copied without evaluating again. Output is UTF-8 without a terminating NUL,
-written only on success. A resolved tree is at most 1 MB, and identical bytes mean nothing changed,
-so layout can be skipped.
+the viewer's UTC offset, whether the theme is dark, and whether the widget lays out right to left.
+Resolve first with `rtl` 0. When the first strong character of the text the tree draws is right to
+left, or the tree draws none and the app is right to left, resolve again with `rtl` 1, and keep
+that direction for the envelope's later resolves. Every output buffer works the same way: pass
+NULL with capacity 0 to learn the size, which comes back with `TWIDGET_ERROR_BUFFER_TOO_SMALL`,
+then call again with a buffer that fits and the same env, and the cached result is copied without
+evaluating again. Output is UTF-8 without a terminating NUL, written only on success. A resolved
+tree is at most 1 MB, and identical bytes mean nothing changed, so layout can be skipped.
 
 ```c
 TWidgetEnv env = {sizeof(TWidgetEnv), server_now_ms, tz_offset_minutes, dark, rtl};

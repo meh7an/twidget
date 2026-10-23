@@ -6,7 +6,8 @@ v0.2 settles the defaults, required properties and paint values that section lef
 settles the expression edge cases it left open, v0.4 and v0.5 settle the resolver's, v0.6 the
 reference layout's, v0.7 the SVG fonts, v0.8 bounds the resolved tree's size, v0.9 settles the
 release artifacts, v0.10 makes each Android library export only the C API, v0.11 says whose
-direction `env.rtl` follows, and v0.12 lets slid `scroll_x` content draw past the strip.
+direction `env.rtl` follows, v0.12 lets slid `scroll_x` content draw past the strip, and v0.13
+takes `env.rtl` from the widget's own text instead.
 
 ## Overview
 
@@ -959,19 +960,25 @@ than the sections above, it governs, and each subsection names the milestone tha
 
 ### Layout direction (Telegram Android M2.1)
 
-- `env.rtl` gives the widget's own direction, taken from its message rather than from the app, as
-  Telegram aligns a Persian text message in an English app. A widget lays out right to left when
-  the first strong character of its message's fallback text, the text outside the `tgw` block, is
-  right to left, and left to right when that character is left to right. When the fallback text
-  has no strong character, the widget follows the app's layout direction.
+- `env.rtl` gives the widget's own direction, taken from the text the widget draws rather than from
+  the app, or from the message's fallback text, which patched clients hide. The client resolves
+  with `env.rtl` false and finds the first strong character in the strings the resolved tree draws.
+  When that character is right to left, it resolves again with `env.rtl` true and uses that tree;
+  otherwise it keeps the first. When the tree draws no strong character, the app's layout
+  direction decides, and a right-to-left app resolves again with `env.rtl` true.
+- The strings drawn are, in the order the resolved tree lists its nodes, each node before its
+  children: a `text`'s `text`; a `text_field`'s `label`, then its `value`, or its `placeholder` when
+  the value is empty; and a `chart`'s `labels`, then its series' names when `legend` is true. Each
+  string counts whole, before any `max_lines` cut. `a11y` labels are not drawn and do not count.
 - A strong character is one of bidi class L, R or AL, found the way rules P2 and P3 of the Unicode
-  Bidirectional Algorithm (UAX #9) find a paragraph's direction: characters between an isolate
-  initiator and its matching PDI are skipped, and R and AL mean right to left.
-- The fallback text is read in message order, the text before the block and then the text after
-  it, so a strong character before the block decides first. Everything but the envelope's block
-  counts, later `tgw` blocks and other code blocks included.
-- Clients decide the direction before resolving, since `env.rtl` is a resolve input, and the crate
-  takes it as given.
+  Bidirectional Algorithm (UAX #9) find a paragraph's direction. Characters between an isolate
+  initiator and its matching PDI are skipped, isolates match within each string, and R and AL mean
+  right to left.
+- The first resolve always uses `env.rtl` false, whatever the app's direction, so every client
+  reaches the same direction for the same message.
+- The client decides once per envelope, on its first resolve, and keeps that direction for clock
+  ticks and theme changes. An edit brings a new envelope and decides again. The C ABI and the
+  resolved format are unchanged, and the crate takes `env.rtl` as given.
 
 ### Scroll strip bleed (Telegram Android M2.1)
 
