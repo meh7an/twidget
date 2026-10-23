@@ -1,11 +1,11 @@
 # Live widgets spec v0
 
-As of 2026-09-27, revision v0.9. This repository copy leads the original design doc and is the
+As of 2026-10-23, revision v0.10. This repository copy leads the original design doc and is the
 source of truth for implementation. v0.1 adds the Implementation clarifications section at the end,
 v0.2 settles the defaults, required properties and paint values that section left open, v0.3
 settles the expression edge cases it left open, v0.4 and v0.5 settle the resolver's, v0.6 the
-reference layout's, v0.7 the SVG fonts, v0.8 bounds the resolved tree's size, and v0.9 settles the
-release artifacts.
+reference layout's, v0.7 the SVG fonts, v0.8 bounds the resolved tree's size, v0.9 settles the
+release artifacts, and v0.10 makes each Android library export only the C API.
 
 ## Overview
 
@@ -692,7 +692,7 @@ Ten decisions shape v0; each row names the choice and the reason it was made.
 | -------------------- | ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
 | Shared or per client | The crate interprets; clients lay out and paint                              | Matches tlottie, tde2e and tgcalls on one side, math and markdown on the other   |
 | Crate language       | Rust with a C ABI                                                            | tlottie set the precedent, the build plumbing exists, and the input is untrusted |
-| Linking              | One umbrella Rust static library bundling tlottie and `twidget`              | Links Rust std once; needs agreement with tlottie's owner                        |
+| Linking              | Android: a self-contained archive; Desktop: umbrella with tlottie, if agreed | Android links beside other Rust libraries today; an umbrella would link std once |
 | v0 transport         | A `tgw` code block inside a text message                                     | Needs no backend, gives exact boundaries and a readable fallback                 |
 | Templates in v0      | Inline, or bundled and referenced by id and version                          | The 4096-character message limit                                                 |
 | Crate output         | Resolved tree as deterministic JSON                                          | Small trees and easy debugging; binary later if profiling asks                   |
@@ -932,7 +932,7 @@ than the sections above, it governs, and each subsection names the milestone tha
   more. Without it, one message could multiply its state across thousands of nodes: a
   4,096-character envelope wrote 31 MB, and a 64 KB state 543 MB.
 
-### Release (M7.1)
+### Release (M7.1, M7.2)
 
 - This repository builds for macOS and Android only, both on the Mac. macOS gets one universal
   `libtwidget.a`, `aarch64-apple-darwin` and `x86_64-apple-darwin` joined by `lipo`, built with
@@ -940,6 +940,11 @@ than the sections above, it governs, and each subsection names the milestone tha
 - Android gets a `libtwidget.a` for each of `armeabi-v7a`, `arm64-v8a`, `x86` and `x86_64`, built
   with NDK 27.2.12479018 for API level 21, as Telegram Android's `TMessagesProj/build.gradle` sets
   them: `minSdkVersion 21`, `-DANDROID_PLATFORM=android-21` and `ndkVersion "27.2.12479018"`.
+- Each Android `libtwidget.a` holds a single object whose only global symbols are the functions
+  `include/twidget.h` declares. Every other definition, Rust std's personality routine and globals
+  included, is local to it, and it keeps no section groups. So it links into one shared library
+  beside other Rust static libraries, such as Telegram Android's tlottie and wallet engine, and its
+  unwinding always runs its own personality routine. The macOS library stays as cargo builds it.
 - Windows and Linux are deferred. They will come through a twidget stage in Telegram Desktop's
   `prepare.py`, cloned from its tlottie stage, and not through scripts here, so this repository
   has no Windows script; `prepare.py` runs its Windows steps as cmd batch. The Windows targets are
@@ -948,4 +953,5 @@ than the sections above, it governs, and each subsection names the milestone tha
   `catch_unwind` cannot catch panics there and the lint policy is the only guarantee.
 - Builds write to `prebuild/`, which this repository ignores: `prebuild/lib/<ABI>/libtwidget.a` for
   the four Android ABIs, `prebuild/lib/macos/libtwidget.a`, and `prebuild/BUILD_INFO`, which
-  records the twidget commit, the rustc version, the NDK version and the API level.
+  records the twidget commit, the rustc version, the NDK version and the API level, and for
+  Android the number of global symbols, `exports=10`.
