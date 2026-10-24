@@ -1,14 +1,14 @@
 # Live widgets spec v0
 
-As of 2026-10-24, revision v0.15. This repository copy leads the original design doc and is the
+As of 2026-10-24, revision v0.16. This repository copy leads the original design doc and is the
 source of truth for implementation. v0.1 adds the Implementation clarifications section at the end,
 v0.2 settles the defaults, required properties and paint values that section left open, v0.3
 settles the expression edge cases it left open, v0.4 and v0.5 settle the resolver's, v0.6 the
 reference layout's, v0.7 the SVG fonts, v0.8 bounds the resolved tree's size, v0.9 settles the
 release artifacts, v0.10 makes each Android library export only the C API, v0.11 says whose
 direction `env.rtl` follows, v0.12 lets slid `scroll_x` content draw past the strip, v0.13 takes
-`env.rtl` from the widget's own text instead, v0.14 says what previews show without a summary, and
-v0.15 adds keyframe and transition animation.
+`env.rtl` from the widget's own text instead, v0.14 says what previews show without a summary,
+v0.15 adds keyframe and transition animation, and v0.16 settles three of its details.
 
 ## Overview
 
@@ -1082,6 +1082,8 @@ Transitions:
 - The template's `transition` is the default for every node, and a node's own `transition`
   replaces it for that node alone; `"none"` turns it off. Without a template `transition`, only
   nodes that ask transition.
+- `repeat` and `connector` ignore `transition`, as they ignore `animate`. A `use`'s transition,
+  like its entries, goes to each shape it draws, unless the symbol's shape sets its own.
 - A transition is `{"duration", "easing", "enter", "exit", "text"}`, all literal: `duration` 1 to
   60,000 ms (default 250), `easing` as for keyframes but never `hold` (default `ease_in_out`),
   `enter` and `exit` `fade` (default) or `none`, and `text` `crossfade` (default), `roll_up`,
@@ -1106,7 +1108,7 @@ Resolved tree:
 - Entries of invisible nodes are dropped, a node in a `repeat` yields one entry per item under its
   item key, and a `use`'s entries go to each shape it draws. Entries carry the keyframe values the
   crate filled in, named easings as Bézier arrays, `once` as 1, and `origin` as fractions of a
-  flow node's box or as a view-box point for a shape.
+  flow node's or frame's box or as a view-box point for a shape.
 
 Budgets:
 

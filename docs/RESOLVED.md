@@ -158,15 +158,15 @@ none.
 
 ### Animations
 
-| Member      | Value                                                                                   |
-| ----------- | --------------------------------------------------------------------------------------- |
-| `key`       | The animated node's key                                                                 |
-| `property`  | The property it animates                                                                |
-| `keyframes` | 2 to 32 `{"at": …, "value": …, "easing": …}`, `at` rising from 0 to 1                   |
-| `duration`  | Milliseconds, from 1 to 60,000                                                          |
-| `delay`     | Milliseconds, from 0 to 60,000                                                          |
-| `repeat`    | `"loop"`, `"alternate"`, or a count from 1 to 1,000, `once` being 1                     |
-| `origin`    | `[fx, fy]` as fractions of a flow node's box, or a view-box point `[x, y]` for a shape  |
+| Member      | Value                                                                                      |
+| ----------- | ------------------------------------------------------------------------------------------ |
+| `key`       | The animated node's key                                                                    |
+| `property`  | The property it animates                                                                   |
+| `keyframes` | 2 to 32 `{"at": …, "value": …, "easing": …}`, `at` rising from 0 to 1                      |
+| `duration`  | Milliseconds, from 1 to 60,000                                                             |
+| `delay`     | Milliseconds, from 0 to 60,000                                                             |
+| `repeat`    | `"loop"`, `"alternate"`, or a count from 1 to 1,000, `once` being 1                        |
+| `origin`    | Fractions `[fx, fy]` of a flow node's or frame's box, or a shape's view-box point `[x, y]` |
 
 A keyframe's `easing` is `"linear"`, `"hold"` or a cubic Bézier `[x1, y1, x2, y2]`; the named
 curves arrive as their Bézier arrays, and the last keyframe's easing is written but never used.
