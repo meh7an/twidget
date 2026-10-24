@@ -7,7 +7,7 @@ expression, apply a default, or see a node type beyond the thirteen below.
 ## Document
 
 ```json
-{"tgw_resolved": 1, "width": "fill", "root": {"type": "column", "key": "0", ...}}
+{"tgw_resolved": 1, "width": "fill", "root": {"type": "column", "key": "0", ...}, "motion": null}
 ```
 
 | Field          | Value                                                                           |
@@ -15,6 +15,7 @@ expression, apply a default, or see a node type beyond the thirteen below.
 | `tgw_resolved` | `1`, the format number `TWIDGET_RESOLVED_FORMAT` names                          |
 | `width`        | `"fill"` for the bubble's content width, or a preferred width in units          |
 | `root`         | The root node, or `null` when it resolves to nothing, as an invisible root does |
+| `motion`       | `null` when nothing moves, or the animations and transitions under *Motion*     |
 
 The JSON is compact UTF-8 with members in the order this document gives and numbers in their
 shortest round-trip form. Identical bytes mean an unchanged tree, so the app can skip layout.
@@ -123,3 +124,64 @@ a repaint and never a resolve.
 
 Entity offsets and lengths are whole numbers of UTF-16 code units, and every entity lies inside
 its text: the crate clips one that runs past the end and leaves out one that starts there.
+
+## Motion
+
+`motion` is `null` when the template sets no transition and no node animates. Otherwise it holds
+the keyframe animations and transitions of the spec's *Animation* clarification, every default
+written out, so an app interpolates without reading the template.
+
+```json
+"motion": {"transition": null, "transitions": [], "animations": [{"key": "0/1", ...}]}
+```
+
+| Field         | Value                                                                                  |
+| ------------- | -------------------------------------------------------------------------------------- |
+| `transition`  | The template's default transition, or `null` when it sets none                         |
+| `transitions` | `{"key": …, "transition": …}` for each node that sets its own, `null` meaning `none`   |
+| `animations`  | The animation entries, each keyed by its node                                          |
+
+`transitions` and `animations` follow the tree's order, a node before its children, and a node's
+entries keep the template's order. Keys are the node keys of the tree, so a `repeat` gives each
+item its own entries, a `use`'s entries repeat for each shape it draws, and an invisible node has
+none.
+
+### Transitions
+
+| Member     | Value                                                                    |
+| ---------- | ------------------------------------------------------------------------ |
+| `duration` | Milliseconds, from 1 to 60,000                                           |
+| `easing`   | `"linear"` or a cubic Bézier `[x1, y1, x2, y2]`                          |
+| `enter`    | `"fade"` or `"none"`, for nodes the new tree adds                        |
+| `exit`     | `"fade"` or `"none"`, for nodes the new tree removes                     |
+| `text`     | `"crossfade"`, `"roll_up"`, `"roll_down"`, `"count"` or `"none"`         |
+
+### Animations
+
+| Member      | Value                                                                                   |
+| ----------- | --------------------------------------------------------------------------------------- |
+| `key`       | The animated node's key                                                                 |
+| `property`  | The property it animates                                                                |
+| `keyframes` | 2 to 32 `{"at": …, "value": …, "easing": …}`, `at` rising from 0 to 1                   |
+| `duration`  | Milliseconds, from 1 to 60,000                                                          |
+| `delay`     | Milliseconds, from 0 to 60,000                                                          |
+| `repeat`    | `"loop"`, `"alternate"`, or a count from 1 to 1,000, `once` being 1                     |
+| `origin`    | `[fx, fy]` as fractions of a flow node's box, or a view-box point `[x, y]` for a shape  |
+
+A keyframe's `easing` is `"linear"`, `"hold"` or a cubic Bézier `[x1, y1, x2, y2]`; the named
+curves arrive as their Bézier arrays, and the last keyframe's easing is written but never used.
+Every `value` is written, the crate filling a missing one with the node's own value.
+
+| Property                                | Value                                                   |
+| --------------------------------------- | ------------------------------------------------------- |
+| `opacity`                               | A number from 0 to 1                                    |
+| `translate`                             | `[x, y]` in units, or in view-box units inside a canvas |
+| `scale`                                 | A number                                                |
+| `rotate`                                | Degrees, clockwise                                      |
+| `background`, `color`, `fill`, `stroke` | A color, or `null` for `none`                           |
+| Shape geometry and `stroke_width`       | A number in view-box units                              |
+| `dash`                                  | `[on, off]` in view-box units                           |
+| `count`                                 | A whole number                                          |
+
+A `dash` entry needs a pair at every keyframe, so the crate drops one whose node has no dash and
+whose keyframes leave a value out.

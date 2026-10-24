@@ -1,13 +1,14 @@
 # Live widgets spec v0
 
-As of 2026-10-23, revision v0.11. This repository copy leads the original design doc and is the
+As of 2026-10-24, revision v0.15. This repository copy leads the original design doc and is the
 source of truth for implementation. v0.1 adds the Implementation clarifications section at the end,
 v0.2 settles the defaults, required properties and paint values that section left open, v0.3
 settles the expression edge cases it left open, v0.4 and v0.5 settle the resolver's, v0.6 the
 reference layout's, v0.7 the SVG fonts, v0.8 bounds the resolved tree's size, v0.9 settles the
 release artifacts, v0.10 makes each Android library export only the C API, v0.11 says whose
 direction `env.rtl` follows, v0.12 lets slid `scroll_x` content draw past the strip, v0.13 takes
-`env.rtl` from the widget's own text instead, and v0.14 says what previews show without a summary.
+`env.rtl` from the widget's own text instead, v0.14 says what previews show without a summary, and
+v0.15 adds keyframe and transition animation.
 
 ## Overview
 
@@ -1014,3 +1015,121 @@ than the sections above, it governs, and each subsection names the milestone tha
 - The client computes the summary when the message loads and again on an edit, since
   `twidget_summary` reports no wake-up, so a summary that reads `env.now`, such as the clock's,
   keeps its load time. A client may refresh it sooner.
+
+### Animation (M8.1)
+
+Templates may animate paint-only properties with keyframes and ease between trees with
+transitions. The crate validates both, resolves their values with the tree and writes them once in
+the resolved tree. Clients interpolate at draw time, only while the widget is visible, with no
+crate call per frame. Animated templates keep `spec` 1: a crate without animation ignores the new
+names, as it does unknown properties, and shows the resting frame.
+
+Keyframes:
+
+- Any node but `repeat` and `connector` may carry `animate`, a list of entries `{"property",
+  "keyframes", "duration", "delay", "repeat", "origin"}`. `keyframes` lists 2 to 32 `{"at",
+  "value", "easing"}`, where `at` is a literal fraction of the duration rising strictly from 0 to
+  exactly 1.
+- `duration` (1 to 60,000 ms, required), `delay` (0 to 60,000 ms, default 0) and each keyframe's
+  `value` take a literal or an expression, so bars in a `repeat` can stagger by `index`.
+  `property`, `at`, `easing`, `repeat` and `origin` are literal. A keyframe without `value` takes
+  the node's own resolved value, so an intro ends exactly where the node rests.
+- `easing` shapes the segment that starts at its keyframe: `linear` (default), `ease_in`,
+  `ease_out`, `ease_in_out`, `hold`, which keeps the value until the next keyframe, or
+  `[x1, y1, x2, y2]`, a cubic Bézier with both x values in 0 to 1. The named curves are CSS's:
+  `[0.42, 0, 1, 1]`, `[0, 0, 0.58, 1]` and `[0.42, 0, 0.58, 1]`.
+- `repeat` is `once` (default), `loop`, `alternate`, which plays forward and then backward, or a
+  whole count from 1 to 1,000.
+- `loop` and `alternate` run on server time, so every viewer sees the same frame: the position is
+  `(server_now − delay) mod period`, the period being the duration, or twice it for `alternate`.
+- `once` and counts start `delay` after the widget first appears in its chat view. Before that the
+  node shows the first keyframe, and after the last cycle the last. An intro replays only when the
+  message's view is built anew, not when it scrolls back into view or an edit arrives.
+
+Properties:
+
+- Every node may animate `opacity` (0 to 1, resting 1), `translate` (`[x, y]`, resting `[0, 0]`),
+  `scale` (resting 1) and `rotate` (degrees clockwise, resting 0), which apply to the node with
+  everything it draws. On flow nodes they exist only for animation; shapes keep their own
+  `opacity`.
+- Transforms apply around `origin`, fractions `[fx, fy]` of the node's box (default
+  `[0.5, 0.5]`), in the order translate, rotate, scale, on top of the node's place and any symbol
+  `transform`. A shape's box bounds its points, control points included. On flow nodes `translate`
+  is in units and its x mirrors right to left; in a canvas it is in view-box units and never
+  mirrors.
+- Colors: `background` on `column`, `row`, `frame` and `canvas`, `color` on `text` and `divider`,
+  and `fill` and `stroke` on shapes. A color interpolates per ARGB channel in sRGB after the client
+  maps its tokens, and `none` stands for the other end's color at alpha 0.
+- Geometry: `x`, `y`, `w`, `h` and `rx` on `rect`; `cx`, `cy`, `rx` and `ry` on `ellipse`; `x1`,
+  `y1`, `x2` and `y2` on `line`; and `stroke_width` and `dash` on every shape. A number, and each
+  member of a pair, moves as `a + (b − a) × e`, `e` being the eased progress.
+- `count` on a `text` shows an integer moving between the keyframe values, rounded half away from
+  zero, in place of the text. It applies only when `tabular` is true, the resolved text is an
+  integer and no value has more digits than it; otherwise the entry is dropped. Layout measures
+  the resolved text, so no frame needs a new layout.
+- A `use` animates only `opacity` and the transforms, applied to each shape it draws.
+- Width, padding, gap, text content, path data and every other property stay still, since
+  animating them would need a layout or a new path each frame. A literal `property` the node's
+  type cannot animate fails the load with `TWIDGET_ERROR_SCHEMA`.
+
+Transitions:
+
+- When a new tree replaces the old one after a state change, an edit or a clock tick, the client
+  matches nodes by key and type and eases between them. Changed animatable properties move from
+  old to new; a flow node or frame whose box moved draws offset from its old place, easing to
+  none, while a size change applies at once; added nodes enter and removed nodes exit; and changed
+  text changes in the node's text style.
+- The template's `transition` is the default for every node, and a node's own `transition`
+  replaces it for that node alone; `"none"` turns it off. Without a template `transition`, only
+  nodes that ask transition.
+- A transition is `{"duration", "easing", "enter", "exit", "text"}`, all literal: `duration` 1 to
+  60,000 ms (default 250), `easing` as for keyframes but never `hold` (default `ease_in_out`),
+  `enter` and `exit` `fade` (default) or `none`, and `text` `crossfade` (default), `roll_up`,
+  `roll_down`, `count` or `none`.
+- `roll_up` slides the old text up and out and the new text up from below, clipped to the node's
+  box, and `roll_down` the reverse. When both texts are tabular and the same length, only the
+  changed characters roll, each in its own cell; otherwise the whole text rolls. `count` moves
+  between two integer texts under the `count` property's conditions, and crossfades otherwise.
+- A tree that arrives mid-transition starts from what is on screen. The first tree, and a
+  re-resolve for a theme, direction or width change, replace the tree without transitions. A
+  running keyframe animation overrides the transitioned value of its property.
+
+Reduced motion: when the system animation scale is 0 or the client's power saving is on, such as
+Telegram's LiteMode, clients show every node's resting values and skip transitions.
+
+Resolved tree:
+
+- A top-level `motion` member follows `root`: `null` when nothing moves, else the default
+  `transition`, the per-node `transitions` and the `animations`, each keyed by node, with every
+  default written out, as `docs/RESOLVED.md` details. The format stays 1, and
+  `include/twidget.h` is unchanged.
+- Entries of invisible nodes are dropped, a node in a `repeat` yields one entry per item under its
+  item key, and a `use`'s entries go to each shape it draws. Entries carry the keyframe values the
+  crate filled in, named easings as Bézier arrays, `once` as 1, and `origin` as fractions of a
+  flow node's box or as a view-box point for a shape.
+
+Budgets:
+
+| Budget                              | Initial limit                     |
+| ----------------------------------- | --------------------------------- |
+| Animation entries per resolved tree | 1,000                             |
+| Keyframes per entry                 | 32                                |
+| Duration and delay                  | 0 to 60,000 ms, durations from 1  |
+| Repeat count                        | 1 to 1,000                        |
+
+A literal out of range fails the load with `TWIDGET_ERROR_BUDGET`. A value an expression produces
+out of range drops its entry, or for a keyframe takes the node's own value, and more than 1,000
+resolved entries fail the resolve with `TWIDGET_ERROR_BUDGET`.
+
+Conformance gains a fourth layer, sampled values:
+
+- `twidget-cli sample <envelope> --at <ms> [--appear <ms>]` writes `{"tgw_sampled": 1, "at": …,
+  "values": [{"key", "property", "value"}]}`: each entry's value at server time `at` for a widget
+  that appeared at `appear`, which defaults to the resolve time. A color samples as `{"from",
+  "to", "mix"}`, which the client mixes in its palette.
+- The reference solves a Bézier's x by bisecting 40 times with basic arithmetic, and clients
+  compare within 1e-6 of each entry's span.
+- A ninth fixture, `motion`, has equalizer bars, rings drawn as arc paths with a count-up,
+  floating reactions and a rolling clock digit. The goldens become 36 resolved trees, 27 frame
+  files and 9 RTL frame files, plus its sampled values under `fixtures/expected/sampled/`.
+- Transitions have no goldens: these rules are their reference, checked in the Widget Lab.
