@@ -352,13 +352,14 @@ fn test_frames_json_lists_boxes_in_paint_order() {
     );
 }
 
-const FIXTURES: [&str; 8] = [
+const FIXTURES: [&str; 9] = [
     "chart",
     "chess",
     "chess_start",
     "clock",
     "flow",
     "kanban",
+    "motion",
     "shapes",
     "textbox",
 ];

@@ -5,6 +5,7 @@
 pub(crate) mod check;
 pub(crate) mod color;
 mod load;
+pub mod motion;
 mod table;
 
 use alloc::boxed::Box;
@@ -14,6 +15,7 @@ use alloc::vec::Vec;
 use crate::expr::Expression;
 use crate::json::{self, Object, Value};
 use crate::Result;
+use motion::{Animation, NodeTransition, Transition};
 
 pub use table::{DefaultValue, PropSpec, ValueKind, COMMON_PROPERTIES};
 
@@ -101,6 +103,8 @@ pub struct Template {
     pub symbols: Vec<Symbol>,
     /// The node tree.
     pub root: Node,
+    /// The transition every node takes unless it sets its own, when the template sets one.
+    pub transition: Option<Transition>,
 }
 
 impl Template {
@@ -158,6 +162,10 @@ pub struct Node {
     pub children: Vec<Node>,
     /// The child of `frame` and `repeat`.
     pub child: Option<Box<Node>>,
+    /// The entries of `animate`, in template order.
+    pub animations: Vec<Animation>,
+    /// The node's own `transition`.
+    pub transition: NodeTransition,
 }
 
 impl Node {

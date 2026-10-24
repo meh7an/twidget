@@ -9,10 +9,12 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use super::geometry::{self, Point, Rect};
+use super::motion::{self, Motion, NodeMotion, Pivot, ResolvedAnimation, TransitionOverride};
 use super::{document_size, value, Resolved, ResolvedNode};
 use crate::budget;
 use crate::expr::{Bindings, Env, Evaluator, Frame};
 use crate::json::{self, Object, Value};
+use crate::model::motion::NodeTransition;
 use crate::model::{Node, NodeKind, Symbol, Template, Tick};
 use crate::{path, Result};
 
@@ -22,6 +24,7 @@ pub(super) fn resolve(template: &Template, state: &Object, env: &Env) -> Result<
         symbols: &template.symbols,
         nodes: 0,
         path_commands: 0,
+        entries: 0,
         written: 0,
         scratch: String::new(),
     };
@@ -32,8 +35,20 @@ pub(super) fn resolve(template: &Template, state: &Object, env: &Env) -> Result<
     } else {
         None
     };
-    let root = top.nodes.pop();
-    let around = document_size(template.width, root.is_some());
+    let mut root = top.nodes.pop();
+    let mut transitions = Vec::new();
+    let mut animations = Vec::new();
+    if let Some(root) = &mut root {
+        gather(root, &mut transitions, &mut animations);
+    }
+    let motion =
+        (template.transition.is_some() || !transitions.is_empty() || !animations.is_empty())
+            .then_some(Motion {
+                transition: template.transition,
+                transitions,
+                animations,
+            });
+    let around = document_size(template.width, root.is_some(), motion.as_ref());
     let written = resolver.written.saturating_add(around);
     if written > budget::RESOLVED_TREE.limit {
         return Err(budget::RESOLVED_TREE.exceeded());
@@ -42,8 +57,36 @@ pub(super) fn resolve(template: &Template, state: &Object, env: &Env) -> Result<
         width: template.width,
         root,
         next_wakeup_ms,
+        motion,
         written,
     })
+}
+
+/// Moves each node's transition and entries out of the finished tree into `motion`'s lists, in
+/// tree order, a node before its children. The recursion follows the template's nesting, which
+/// the JSON nesting budget bounds.
+fn gather(
+    node: &mut ResolvedNode,
+    transitions: &mut Vec<TransitionOverride>,
+    animations: &mut Vec<ResolvedAnimation>,
+) {
+    let NodeMotion {
+        transition,
+        animations: own,
+    } = core::mem::take(&mut node.motion);
+    if let Some(transition) = transition {
+        transitions.push(TransitionOverride {
+            key: node.key.clone(),
+            transition,
+        });
+    }
+    animations.extend(own);
+    for child in &mut node.children {
+        gather(child, transitions, animations);
+    }
+    if let Some(child) = node.child.as_deref_mut() {
+        gather(child, transitions, animations);
+    }
 }
 
 /// The first `tick` boundary after `now_ms`, so a time exactly on one waits for the next.
@@ -175,7 +218,10 @@ struct Resolver<'a> {
     nodes: usize,
     /// Normalized path commands drawn so far.
     path_commands: usize,
-    /// The bytes the finished nodes write, counted against the resolved-tree budget.
+    /// Animation entries resolved so far.
+    entries: usize,
+    /// The bytes the finished nodes and their motion write, counted against the resolved-tree
+    /// budget.
     written: usize,
     /// Where each finished node's properties are written to count them.
     scratch: String,
@@ -266,6 +312,23 @@ impl Resolver<'_> {
             return Ok(());
         }
         self.count(1)?;
+        let pivot = if is_shape(node.kind) {
+            Pivot::Point {
+                bounds: motion::shape_bounds(node.kind, &properties),
+                transform: None,
+            }
+        } else {
+            Pivot::Fractions
+        };
+        let animations = motion::entries(
+            &mut self.evaluator,
+            &node.animations,
+            &key,
+            &properties,
+            bindings,
+            &pivot,
+        )?;
+        let node_motion = self.motion(&key, node.transition, animations)?;
         let mut inner = Siblings::new(key.clone(), Some(node.kind));
         for (index, child) in node.children.iter().enumerate() {
             self.child(child, index, &mut inner, bindings)?;
@@ -291,10 +354,46 @@ impl Resolver<'_> {
             properties,
             children,
             child,
+            motion: node_motion,
         };
         self.weigh(&resolved)?;
         siblings.nodes.push(resolved);
         Ok(())
+    }
+
+    /// A node's motion: its own transition and its resolved entries, counted against the entry
+    /// budget and their written bytes against the resolved-tree budget.
+    fn motion(
+        &mut self,
+        key: &str,
+        transition: NodeTransition,
+        animations: Vec<ResolvedAnimation>,
+    ) -> Result<NodeMotion> {
+        self.entries = self.entries.saturating_add(animations.len());
+        if self.entries > budget::ANIMATION_ENTRIES.limit {
+            return Err(budget::ANIMATION_ENTRIES.exceeded());
+        }
+        let motion = NodeMotion::of(transition, animations);
+        let mut size = 0usize;
+        if let Some(transition) = motion.transition {
+            self.scratch.clear();
+            TransitionOverride {
+                key: key.to_owned(),
+                transition,
+            }
+            .write(&mut self.scratch);
+            size = size.saturating_add(self.scratch.len());
+        }
+        for animation in &motion.animations {
+            self.scratch.clear();
+            animation.write(&mut self.scratch);
+            size = size.saturating_add(self.scratch.len());
+        }
+        self.written = self.written.saturating_add(size);
+        if self.written > budget::RESOLVED_TREE.limit {
+            return Err(budget::RESOLVED_TREE.exceeded());
+        }
+        Ok(motion)
     }
 
     /// Draws a `use` as its symbol's shapes, fitted into its box, with `current` painted in the
@@ -322,6 +421,18 @@ impl Resolver<'_> {
         let color = find(&properties, "color").cloned().unwrap_or(Value::Null);
         let mut label = find(&properties, "a11y").cloned();
         let key = siblings.key(&siblings.unique(&segment.text));
+        // The `use`'s own entries turn around its box and go to every shape it draws.
+        let inherited = motion::entries(
+            &mut self.evaluator,
+            &node.animations,
+            &key,
+            &properties,
+            bindings,
+            &Pivot::Point {
+                bounds: Rect { x, y, w, h },
+                transform: None,
+            },
+        )?;
         let mut shapes = Siblings::new(key, Some(NodeKind::Use));
         for (index, shape) in symbol.shapes.iter().enumerate() {
             if !self.visible(shape, bindings)? {
@@ -352,12 +463,36 @@ impl Resolver<'_> {
             self.count(1)?;
             let shape_key = shapes.key(&shapes.unique(&shape_segment.text));
             shapes.take(shape_segment.text);
+            let mut animations: Vec<ResolvedAnimation> = inherited
+                .iter()
+                .map(|entry| ResolvedAnimation {
+                    key: shape_key.clone(),
+                    ..entry.clone()
+                })
+                .collect();
+            animations.extend(motion::entries(
+                &mut self.evaluator,
+                &shape.animations,
+                &shape_key,
+                &drawn,
+                bindings,
+                &Pivot::Point {
+                    bounds: motion::shape_bounds(shape.kind, &drawn),
+                    transform: Some(transform),
+                },
+            )?);
+            let transition = match shape.transition {
+                NodeTransition::Default => node.transition,
+                own @ (NodeTransition::None | NodeTransition::Own(_)) => own,
+            };
+            let shape_motion = self.motion(&shape_key, transition, animations)?;
             let resolved = ResolvedNode {
                 kind: shape.kind,
                 key: shape_key,
                 properties: drawn,
                 children: Vec::new(),
                 child: None,
+                motion: shape_motion,
             };
             self.weigh(&resolved)?;
             shapes.nodes.push(resolved);
@@ -591,7 +726,16 @@ fn part(
         ]),
         children: Vec::new(),
         child: None,
+        motion: NodeMotion::default(),
     }
+}
+
+/// Whether nodes of this type are canvas shapes, whose origin is a point in view-box units.
+fn is_shape(kind: NodeKind) -> bool {
+    matches!(
+        kind,
+        NodeKind::Rect | NodeKind::Ellipse | NodeKind::Line | NodeKind::Path
+    )
 }
 
 fn find<'p>(properties: &'p [(&str, Value)], name: &str) -> Option<&'p Value> {

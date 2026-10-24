@@ -20,13 +20,14 @@ use twidget::expr::Env;
 use twidget::model::{self, Template};
 use twidget::resolve::Instance;
 
-const FIXTURES: [&str; 8] = [
+const FIXTURES: [&str; 9] = [
     "chart",
     "chess",
     "chess_start",
     "clock",
     "flow",
     "kanban",
+    "motion",
     "shapes",
     "textbox",
 ];
@@ -34,7 +35,7 @@ const FIXTURES: [&str; 8] = [
 /// The fixtures whose four goldens are the same bytes, because no expression in them reads
 /// `env.dark` or `env.rtl`: colors stay theme tokens and alignment stays logical, so the app
 /// applies the theme and the direction itself. Today that is every fixture.
-const SAME_IN_EVERY_THEME_AND_DIRECTION: [&str; 8] = FIXTURES;
+const SAME_IN_EVERY_THEME_AND_DIRECTION: [&str; 9] = FIXTURES;
 
 /// Each theme and direction: the golden's name parts and the environment's flags.
 const VARIANTS: [(&str, &str, bool, bool); 4] = [

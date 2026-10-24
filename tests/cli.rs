@@ -15,13 +15,14 @@ use std::fs;
 use std::path::Path;
 use std::process::{Command, Output};
 
-const FIXTURES: [&str; 8] = [
+const FIXTURES: [&str; 9] = [
     "chart",
     "chess",
     "chess_start",
     "clock",
     "flow",
     "kanban",
+    "motion",
     "shapes",
     "textbox",
 ];
@@ -116,6 +117,30 @@ fn test_svg_draws_every_fixture_in_both_themes_and_directions() {
 }
 
 #[test]
+fn test_sample_writes_the_sampled_goldens() {
+    let path = envelope("motion");
+    // The fixed time, when the widget appears unless --appear says otherwise.
+    let now: i64 = 1_790_415_687_123;
+    for offset in [0, 150, 700, 1300, 2500, 61_000] {
+        let file = format!("motion.{offset}.json");
+        let expected = golden(&["fixtures", "expected", "sampled", &file]);
+        let at = (now + offset).to_string();
+        assert_eq!(
+            stdout(&["sample", path.as_str(), "--at", &at]),
+            expected,
+            "{file}"
+        );
+        let appear = now.to_string();
+        let arguments = ["sample", path.as_str(), "--at", &at, "--appear", &appear];
+        assert_eq!(stdout(&arguments), expected, "{file}, appearing at --now");
+    }
+    // A widget without animation samples no values.
+    let clock = envelope("clock");
+    let sampled = stdout(&["sample", clock.as_str(), "--at", "0"]);
+    assert_eq!(sampled, b"{\"tgw_sampled\":1,\"at\":0,\"values\":[]}\n");
+}
+
+#[test]
 fn test_help_prints_usage_and_succeeds() {
     let help = String::from_utf8(stdout(&["--help"])).unwrap();
     assert!(help.starts_with("usage: twidget-cli"), "{help}");
@@ -153,6 +178,12 @@ fn test_bad_arguments_print_usage_and_fail() {
         (
             vec!["resolve", clock.as_str(), "extra"],
             "unexpected argument extra",
+        ),
+        (vec!["sample", clock.as_str()], "sample needs --at"),
+        (vec!["sample", clock.as_str(), "--at", "now"], "--at needs"),
+        (
+            vec!["sample", clock.as_str(), "--at", "0", "--appear", "1.5"],
+            "--appear needs",
         ),
     ] {
         let (code, stderr) = failure(&arguments);

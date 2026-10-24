@@ -7,7 +7,7 @@ natively, along with when to resolve again and a summary for chat lists.
 
 The contracts live in this repository:
 
-- [`docs/SPEC.md`](docs/SPEC.md), the behavior, revision v0.14.
+- [`docs/SPEC.md`](docs/SPEC.md), the behavior, revision v0.16.
 - [`include/twidget.h`](include/twidget.h), the C ABI, version 1.
 - [`docs/RESOLVED.md`](docs/RESOLVED.md), the resolved tree's JSON, format 1.
 
@@ -82,14 +82,19 @@ version, sits at the top of `scripts/prebuild.sh`, which each script sources.
 
 ## The command line
 
-`twidget-cli` resolves a widget, lays it out with the conformance tests' fake text metrics, or
-draws it as SVG, all at a fixed test time unless `--now` and `--tz` say otherwise:
+`twidget-cli` resolves a widget, lays it out with the conformance tests' fake text metrics, draws
+it as SVG, or samples its animations, all at a fixed test time unless `--now` and `--tz` say
+otherwise:
 
 ```sh
 cargo run --features cli -- resolve fixtures/envelopes/clock.json
 cargo run --features cli -- layout fixtures/envelopes/kanban.json --width 320 --rtl
 cargo run --features cli -- svg fixtures/envelopes/chess_start.json --dark > /tmp/chess_start.svg
+cargo run --features cli -- sample fixtures/envelopes/motion.json --at 1790415687823
 ```
+
+`sample` writes each animation's value at the server time `--at`, for a widget that appeared at
+`--appear`, which defaults to `--now`. SVGs draw the resting frame.
 
 `cargo run --features cli -- --help` lists every option. Envelopes that name a bundled template
 find it in `fixtures/templates`, or wherever `--templates` points.
@@ -97,13 +102,35 @@ find it in `fixtures/templates`, or wherever `--templates` points.
 ## Tests and goldens
 
 The fixtures in `fixtures/envelopes` are locked as golden files: resolved trees in
-`fixtures/expected/resolved`, and the reference layout's frames in `fixtures/expected/frames`.
-Only these commands rewrite them, and a rewrite is reviewed as a diff before it is committed:
+`fixtures/expected/resolved`, the reference layout's frames in `fixtures/expected/frames`, and the
+animated fixture's sampled values in `fixtures/expected/sampled`. Only these commands rewrite them,
+and a rewrite is reviewed as a diff before it is committed:
 
 ```sh
 TWIDGET_BLESS=1 cargo test --test goldens
 TWIDGET_BLESS=1 cargo test --features cli --test layout
+TWIDGET_BLESS=1 cargo test --features cli --test sampled
 ```
+
+## Animating a widget
+
+A node animates paint-only properties with keyframes in `animate`, and a template eases between
+resolves with `transition`. Looping entries run on server time, so every viewer sees the same
+frame; `once` and counted ones start when the widget first appears. Values may be expressions, as
+the delay that staggers these bars is:
+
+```json
+{"type": "rect", "x": {"=": "index * 24 + 4"}, "y": 8, "w": 16, "h": 24, "fill": "accent",
+ "animate": [{"property": "h", "duration": 900, "delay": {"=": "index * 150"}, "repeat": "loop",
+   "keyframes": [{"at": 0, "value": 8, "easing": "ease_in_out"}, {"at": 0.5, "value": 32,
+     "easing": "ease_in_out"}, {"at": 1, "value": 8}]}]}
+```
+
+A keyframe without a `value` takes the node's own, so an intro ends where the node rests. The
+template's `transition`, such as `{"duration": 300}`, is every node's default, and a node replaces
+it with its own, such as `{"text": "roll_up"}` on a clock, or turns it off with `"none"`. The
+spec's *Animation* clarification lists what each node type animates, and
+`fixtures/envelopes/motion.json` uses most of it.
 
 A seeded mutation suite runs thousands of mangled fixtures through the Rust API on every test run,
 and through the C API when `c-api` is on. Worst-case documents at every budget are timed by an
@@ -182,6 +209,16 @@ across resolves, so moved nodes can animate. Every container clips its content t
 that a `scroll_x`'s slid content may draw sideways into free space up to the bubble's edges, as the
 spec's *Scroll strip bleed* defines. To test a native layout, inject the fake text metrics of the
 spec's conformance section and compare against `fixtures/expected/frames`.
+
+**Animation.** A tree carries a `motion` member beside `root`, `null` when nothing moves: the
+animation entries and the transitions nodes take, keyed by node, with every value worked out.
+Interpolate at draw time while the widget is visible, with no crate call per frame, running
+`loop` and `alternate` entries on server time and the rest from when the widget first appears.
+When a new tree replaces the old one after a state change, an edit or a clock tick, match nodes by
+key and ease between them as the spec's *Animation* clarification describes; a theme, direction or
+width change replaces the tree at once. With the system's animation scale at 0 or power saving
+on, show the resting tree and skip transitions. To test an interpolator, compare it against
+`fixtures/expected/sampled`, which `twidget-cli sample` writes.
 
 ## License
 

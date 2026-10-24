@@ -434,13 +434,14 @@ mod tests {
     const BUFFER_TOO_SMALL: i32 = Status::BufferTooSmall.code();
     const INTERNAL: i32 = Status::Internal.code();
 
-    const FIXTURES: [&str; 8] = [
+    const FIXTURES: [&str; 9] = [
         "chart",
         "chess",
         "chess_start",
         "clock",
         "flow",
         "kanban",
+        "motion",
         "shapes",
         "textbox",
     ];
@@ -1264,7 +1265,7 @@ mod tests {
                 }
             }
         }
-        assert_eq!(total, 800);
+        assert_eq!(total, 100 * crate::mutation::FIXTURES.len());
         assert!(unexpected.is_empty(), "unexpected statuses: {unexpected:?}");
         assert!(
             failures > total,

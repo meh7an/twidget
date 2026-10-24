@@ -12,13 +12,14 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-const ENVELOPES: [&str; 8] = [
+const ENVELOPES: [&str; 9] = [
     "chart",
     "chess",
     "chess_start",
     "clock",
     "flow",
     "kanban",
+    "motion",
     "shapes",
     "textbox",
 ];

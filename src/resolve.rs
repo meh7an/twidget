@@ -4,6 +4,7 @@
 
 mod chart;
 mod geometry;
+mod motion;
 mod tree;
 mod value;
 
@@ -16,6 +17,9 @@ use crate::expr::{Bindings, Env, Evaluator};
 use crate::json::{self, Object, Value};
 use crate::model::{self, Envelope, NodeKind, PropValue, Template, TemplateSource, Width};
 use crate::{Error, Result};
+use motion::NodeMotion;
+
+pub use motion::{Motion, ResolvedAnimation, ResolvedKeyframe, TransitionOverride};
 
 /// The resolved-JSON format this crate writes, the number in its `tgw_resolved` member.
 pub const FORMAT: u32 = 1;
@@ -137,6 +141,8 @@ pub struct Resolved {
     pub root: Option<ResolvedNode>,
     /// The server time to resolve again at, when the tree read `env.now`.
     pub next_wakeup_ms: Option<i64>,
+    /// The animations and transitions, or `None` when nothing moves.
+    pub motion: Option<Motion>,
     /// How many bytes [`Resolved::json`] writes, counted while the tree was built.
     pub(crate) written: usize,
 }
@@ -152,18 +158,24 @@ impl Resolved {
             Some(root) => root.write(&mut out),
             None => out.push_str(NO_NODE),
         }
+        out.push_str(MOTION);
+        match &self.motion {
+            Some(motion) => motion.write(&mut out),
+            None => out.push_str(NO_NODE),
+        }
         out.push('}');
         out
     }
 }
 
-/// What a tree of `width` writes around its root: the head, the closing brace, and `null` when it
-/// has no root.
-pub(crate) fn document_size(width: Width, has_root: bool) -> usize {
+/// What a tree of `width` writes around its root and its motion's overrides and entries: the
+/// head, `null` when it has no root, the `motion` member's frame, and the closing brace.
+pub(crate) fn document_size(width: Width, has_root: bool, motion: Option<&Motion>) -> usize {
     let mut head = String::new();
     write_head(width, &mut head);
     let root = if has_root { 0 } else { NO_NODE.len() };
-    head.len() + root + "}".len()
+    let motion = motion.map_or(NO_NODE.len(), Motion::frame_size);
+    head.len() + root + MOTION.len() + motion + "}".len()
 }
 
 /// Appends the document's members up to the root's value.
@@ -178,8 +190,11 @@ fn write_head(width: Width, out: &mut String) {
     out.push_str(",\"root\":");
 }
 
-/// A missing root or frame child, as written.
+/// A missing root or frame child, or a tree where nothing moves, as written.
 const NO_NODE: &str = "null";
+
+/// What comes before the `motion` member's value, as written.
+const MOTION: &str = ",\"motion\":";
 
 /// What opens a container's children, as written.
 const CHILDREN: &str = ",\"children\":[";
@@ -226,6 +241,9 @@ pub struct ResolvedNode {
     pub children: Vec<ResolvedNode>,
     /// The child of a `frame`, when it has a visible one.
     pub child: Option<Box<ResolvedNode>>,
+    /// The node's transition and animation entries, until the finished tree gathers them into
+    /// [`Resolved::motion`].
+    pub(crate) motion: NodeMotion,
 }
 
 impl ResolvedNode {

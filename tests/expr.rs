@@ -755,6 +755,7 @@ fn test_fixture_expressions_evaluate_against_their_state() {
                 "Note for the club: Meet at the caf\u{e9} at 7 \u{2014} bring the board.",
             ),
             "shapes" => String::from("Vector shapes"),
+            "motion" => String::from("Move 360"),
             other => panic!("unexpected fixture {other}"),
         };
         assert_eq!(summary, Value::String(expected_summary), "{name}");
@@ -787,5 +788,7 @@ fn test_fixture_expressions_evaluate_against_their_state() {
             _ => {}
         }
     }
-    assert_eq!(clocks, ["clock"]);
+    // The directory lists its files in no set order.
+    clocks.sort();
+    assert_eq!(clocks, ["clock", "motion"]);
 }

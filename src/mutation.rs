@@ -24,7 +24,7 @@ pub(crate) struct Fixture {
 const CHESS: &[u8] = include_bytes!("../fixtures/templates/tg.chess@1.json");
 const KANBAN: &[u8] = include_bytes!("../fixtures/templates/tg.kanban@1.json");
 
-pub(crate) const FIXTURES: [Fixture; 8] = [
+pub(crate) const FIXTURES: [Fixture; 9] = [
     Fixture {
         name: "chart",
         envelope: include_bytes!("../fixtures/envelopes/chart.json"),
@@ -54,6 +54,11 @@ pub(crate) const FIXTURES: [Fixture; 8] = [
         name: "kanban",
         envelope: include_bytes!("../fixtures/envelopes/kanban.json"),
         template: Some(KANBAN),
+    },
+    Fixture {
+        name: "motion",
+        envelope: include_bytes!("../fixtures/envelopes/motion.json"),
+        template: None,
     },
     Fixture {
         name: "shapes",
@@ -449,7 +454,7 @@ fn test_mutated_fixtures_through_the_rust_api_fail_only_with_statuses() {
             Err(_) => panicked.push(format!("{} seed {:#x}", case.fixture, case.seed)),
         }
     }
-    assert_eq!(total, 2000);
+    assert_eq!(total, 250 * FIXTURES.len());
     assert!(panicked.is_empty(), "panicked: {panicked:?}");
     // The mangling must reach the failure paths often, or it proves little.
     assert!(

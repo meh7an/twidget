@@ -32,6 +32,8 @@ mod mutation;
 pub mod path;
 pub mod resolve;
 #[cfg(any(feature = "cli", feature = "wasm"))]
+pub mod sample;
+#[cfg(any(feature = "cli", feature = "wasm"))]
 pub mod svg;
 
 pub use error::{Error, Result, Status};

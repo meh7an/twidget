@@ -1,0 +1,60 @@
+{
+"tgw": 1,
+"template": {
+"spec": 1, "id": "tg.motion", "version": 1,
+"summary": {"=": "'Move ' + string(state.move)"},
+"transition": {"duration": 300, "easing": "ease_out"},
+"defs": {"symbols": {"dot": {"view_box": [10, 10], "shapes": [
+  {"type": "ellipse", "cx": 5, "cy": 5, "rx": 5, "ry": 5, "fill": "current"}]}}},
+"root": {"type": "column", "padding": 16, "gap": 12, "background": "surface", "radius": 12, "children": [
+  {"type": "text", "style": "display", "tabular": true, "align": "center",
+   "text": {"=": "format_time(env.now, 'HH:mm:ss')"}, "transition": {"duration": 250, "text": "roll_up"}},
+  {"type": "canvas", "view_box": [120, 40], "children": [
+    {"type": "repeat", "each": {"=": "range(5)"}, "child": {
+     "type": "rect", "x": {"=": "index * 24 + 4"}, "y": 8, "w": 16, "h": 24, "rx": 3, "fill": "accent",
+     "animate": [
+      {"property": "h", "duration": 900, "delay": {"=": "index * 150"}, "repeat": "loop", "keyframes": [
+        {"at": 0, "value": 8, "easing": "ease_in_out"}, {"at": 0.5, "value": 32, "easing": "ease_in_out"},
+        {"at": 1, "value": 8}]},
+      {"property": "y", "duration": 900, "delay": {"=": "index * 150"}, "repeat": "loop", "keyframes": [
+        {"at": 0, "value": 28, "easing": "ease_in_out"}, {"at": 0.5, "value": 4, "easing": "ease_in_out"},
+        {"at": 1, "value": 28}]}]}}]},
+  {"type": "row", "gap": 12, "children": [
+    {"type": "canvas", "width": 64, "view_box": [80, 80], "children": [
+      {"type": "path", "d": "M 40 8 A 32 32 0 1 1 40 72 A 32 32 0 1 1 40 8", "fill": "none",
+       "stroke": "palette_1", "stroke_width": 10,
+       "dash": {"=": "[state.move / state.goal * 201.06, 201.06]"},
+       "animate": [{"property": "dash", "duration": 1200, "keyframes": [
+         {"at": 0, "value": [0, 201.06], "easing": "ease_out"}, {"at": 1}]}]}]},
+    {"type": "column", "weight": 1, "children": [
+      {"type": "text", "style": "title", "tabular": true, "text": {"=": "string(state.move)"},
+       "animate": [{"property": "count", "duration": 1200, "delay": 200, "keyframes": [
+         {"at": 0, "value": 0, "easing": [0.25, 0.1, 0.25, 1]}, {"at": 1}]}]},
+      {"type": "text", "style": "caption", "color": "text_secondary", "transition": "none",
+       "text": {"=": "'of ' + string(state.goal) + ' kcal'"}}]}]},
+  {"type": "canvas", "view_box": [120, 48], "children": [
+    {"type": "repeat", "each": {"=": "state.reactions"}, "child": {
+     "type": "frame", "x": {"=": "index * 30 + 5"}, "y": 28, "w": 20, "h": 20,
+     "child": {"type": "text", "align": "center", "text": {"=": "item"}},
+     "animate": [
+      {"property": "translate", "duration": 2400, "delay": {"=": "index * 600"}, "repeat": "loop",
+       "keyframes": [{"at": 0, "value": [0, 0]}, {"at": 1, "value": [6, -28]}]},
+      {"property": "opacity", "duration": 2400, "delay": {"=": "index * 600"}, "repeat": "loop",
+       "keyframes": [{"at": 0, "value": 1}, {"at": 0.6, "value": 1, "easing": "ease_in"},
+         {"at": 1, "value": 0}]}]}}]},
+  {"type": "canvas", "view_box": [200, 8], "children": [
+    {"type": "rect", "w": 200, "h": 8, "rx": 4, "fill": "surface_alt"},
+    {"type": "rect", "w": {"=": "env.now % 60000 / 300"}, "h": 8, "rx": 4, "fill": "accent",
+     "transition": {"duration": 1000, "easing": "linear"},
+     "animate": [{"property": "fill", "duration": 1500, "repeat": "alternate", "keyframes": [
+       {"at": 0, "easing": "ease_in_out"}, {"at": 1, "value": "palette_4"}]}]},
+    {"type": "use", "symbol": "dot", "x": {"=": "env.now % 60000 / 300 - 4"}, "y": 0, "w": 8, "h": 8,
+     "color": "on_accent", "animate": [
+      {"property": "scale", "duration": 600, "repeat": "alternate", "keyframes": [
+        {"at": 0, "value": 1, "easing": "ease_in_out"}, {"at": 1, "value": 0.6}]},
+      {"property": "opacity", "duration": 400, "repeat": 3, "keyframes": [
+        {"at": 0, "value": 1, "easing": "hold"}, {"at": 0.5, "value": 0.3, "easing": "hold"},
+        {"at": 1, "value": 1}]}]}]}]}
+},
+"state": {"move": 360, "goal": 500, "reactions": ["🔥", "👏", "🎉", "😂"]}
+}

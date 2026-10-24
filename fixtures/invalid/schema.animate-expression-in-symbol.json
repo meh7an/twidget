@@ -1,0 +1,1 @@
+{"tgw": 1, "template": {"spec": 1, "id": "tg.test", "version": 1, "root": {"type": "canvas", "view_box": [10, 10], "children": [{"type": "use", "symbol": "s"}]}, "defs": {"symbols": {"s": {"view_box": [10, 10], "shapes": [{"type": "rect", "w": 10, "h": 10, "animate": [{"property": "w", "duration": {"=": "100"}, "keyframes": [{"at": 0, "value": 0}, {"at": 1, "value": 1}]}]}]}}}}}

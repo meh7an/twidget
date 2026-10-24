@@ -108,3 +108,31 @@ pub const VIEW_BOX_DIMENSIONS: Budget = Budget {
 
 /// The smallest view-box dimension.
 pub const VIEW_BOX_MIN: usize = 1;
+
+/// Animation entries in one resolved tree.
+pub const ANIMATION_ENTRIES: Budget = Budget {
+    name: "animation entries per resolved tree",
+    limit: 1000,
+};
+
+/// Keyframes in one animation entry.
+pub const KEYFRAMES_PER_ENTRY: Budget = Budget {
+    name: "keyframes per entry",
+    limit: 32,
+};
+
+/// The longest duration or delay, in milliseconds; durations also start at
+/// [`SHORTEST_DURATION_MS`].
+pub const DURATION_AND_DELAY: Budget = Budget {
+    name: "duration and delay",
+    limit: 60_000,
+};
+
+/// The shortest duration, in milliseconds.
+pub const SHORTEST_DURATION_MS: usize = 1;
+
+/// The most times an animation plays.
+pub const REPEAT_COUNT: Budget = Budget {
+    name: "repeat count",
+    limit: 1000,
+};

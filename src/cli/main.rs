@@ -1,6 +1,6 @@
 //! `twidget-cli`, the command-line front end to twidget: it resolves a widget envelope, lays it
-//! out, or draws it as SVG, through the crate's Rust API, so authors can preview a widget without
-//! building a client.
+//! out, draws it as SVG, or samples its animations, through the crate's Rust API, so authors can
+//! preview a widget without building a client.
 
 use std::fs;
 use std::io::{self, Write};
@@ -11,14 +11,15 @@ use std::sync::Arc;
 use twidget::expr::Env;
 use twidget::model::{self, Template};
 use twidget::resolve::Instance;
-use twidget::{layout, svg, Error};
+use twidget::{layout, sample, svg, Error};
 
 const USAGE: &str = "\
-usage: twidget-cli <resolve|layout|svg> <envelope.json> [options]
+usage: twidget-cli <resolve|layout|svg|sample> <envelope.json> [options]
 
   resolve  writes the resolved tree as JSON
   layout   writes the reference layout's frames as JSON
   svg      draws the widget as SVG
+  sample   writes each animation's value at --at as JSON
 
 options:
   --templates <dir>  where bundled templates are, as <id>@<version>.json
@@ -28,6 +29,8 @@ options:
   --tz <minutes>     the UTC offset in minutes (default 210)
   --dark             the dark theme
   --rtl              right to left
+  --at <ms>          the server time sample reads, which it needs
+  --appear <ms>      when the widget first appeared, for sample (default --now)
   -h, --help         this help";
 
 /// The width `layout` and `svg` lay out in without `--width`, the middle conformance width.
@@ -45,6 +48,8 @@ enum Command {
     Resolve,
     Layout,
     Svg,
+    /// Samples at this server time, for a widget that appeared at the second.
+    Sample(i64, i64),
 }
 
 /// A command and everything it runs with.
@@ -55,6 +60,12 @@ struct Run {
     templates: PathBuf,
     width: f64,
     env: Env,
+}
+
+/// Reads a time in whole Unix milliseconds for `option`.
+fn milliseconds(text: &str, option: &str) -> Result<i64, String> {
+    text.parse()
+        .map_err(|_| format!("{option} needs whole milliseconds"))
 }
 
 fn main() -> ExitCode {
@@ -76,6 +87,8 @@ fn parse(arguments: &[String]) -> Result<Option<Run>, String> {
     let mut templates = PathBuf::from("fixtures/templates");
     let mut width = DEFAULT_WIDTH;
     let mut env = Env::TEST;
+    let mut at = None;
+    let mut appear = None;
     let mut arguments = arguments.iter();
     while let Some(argument) = arguments.next() {
         let mut value = || {
@@ -93,11 +106,9 @@ fn parse(arguments: &[String]) -> Result<Option<Run>, String> {
                     .filter(|width| width.is_finite() && *width >= 0.0)
                     .ok_or("--width needs a number of units, 0 or more")?;
             }
-            "--now" => {
-                env.now_ms = value()?
-                    .parse()
-                    .map_err(|_| "--now needs whole milliseconds")?;
-            }
+            "--now" => env.now_ms = milliseconds(value()?, argument)?,
+            "--at" => at = Some(milliseconds(value()?, argument)?),
+            "--appear" => appear = Some(milliseconds(value()?, argument)?),
             "--tz" => {
                 env.tz_offset_minutes = value()?.parse().map_err(|_| "--tz needs whole minutes")?;
             }
@@ -109,6 +120,8 @@ fn parse(arguments: &[String]) -> Result<Option<Run>, String> {
                     "resolve" => Command::Resolve,
                     "layout" => Command::Layout,
                     "svg" => Command::Svg,
+                    // The times are known once every option is read.
+                    "sample" => Command::Sample(0, 0),
                     other => return Err(format!("unknown command {other}")),
                 });
             }
@@ -116,7 +129,12 @@ fn parse(arguments: &[String]) -> Result<Option<Run>, String> {
             word => return Err(format!("unexpected argument {word}")),
         }
     }
-    let command = command.ok_or("missing the command")?;
+    let command = match command.ok_or("missing the command")? {
+        Command::Sample(..) => {
+            Command::Sample(at.ok_or("sample needs --at")?, appear.unwrap_or(env.now_ms))
+        }
+        other => other,
+    };
     let envelope = envelope.ok_or("missing the envelope file")?;
     Ok(Some(Run {
         command,
@@ -139,6 +157,9 @@ fn output(run: &Run) -> Result<String, String> {
             format!("{}\n", frames.json())
         }
         Command::Svg => svg::render(&resolved, run.width, run.env.rtl, run.env.dark),
+        Command::Sample(at_ms, appear_ms) => {
+            format!("{}\n", sample::sample(&resolved, at_ms, appear_ms).json())
+        }
     };
     Ok(text)
 }

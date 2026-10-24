@@ -1,11 +1,14 @@
 //! Loading parsed JSON into the model, with every check the spec asks for before evaluation.
 
+mod animation;
+
 use alloc::borrow::ToOwned;
 use alloc::boxed::Box;
 use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 
+use super::motion::{self, NodeTransition};
 use super::table::{DefaultValue, ValueKind, COMMON_PROPERTIES, INDEX_NAME, ITEM_NAME};
 use super::{
     check, Envelope, Node, NodeKind, PropValue, Property, Symbol, Template, TemplateRef,
@@ -99,6 +102,10 @@ fn template(value: &Value, loc: Loc) -> Result<Template> {
         width: width(fields.get("width"), loc.key("width"))?,
         symbols,
         root,
+        transition: animation::template_transition(
+            fields.get("transition"),
+            loc.key("transition"),
+        )?,
     })
 }
 
@@ -501,11 +508,28 @@ impl Loader {
                     .error("scroll_x children need a width"));
             }
         }
+        // A `repeat` or `connector` ignores both, as any node ignores a property it lacks.
+        let (animations, transition) = if motion::animates(kind) {
+            (
+                animation::animations(
+                    fields.get("animate"),
+                    kind,
+                    loc.key("animate"),
+                    context,
+                    names,
+                )?,
+                animation::node_transition(fields.get("transition"), loc.key("transition"))?,
+            )
+        } else {
+            (Vec::new(), NodeTransition::Default)
+        };
         Ok(Node {
             kind,
             properties,
             children,
             child,
+            animations,
+            transition,
         })
     }
 

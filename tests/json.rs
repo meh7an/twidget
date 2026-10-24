@@ -307,7 +307,7 @@ fn test_round_trip_fixtures_and_samples_are_stable() {
 #[test]
 fn test_parse_every_fixture_within_its_budget() {
     let paths = fixture_paths();
-    assert_eq!(paths.len(), 10);
+    assert_eq!(paths.len(), 11);
     for path in &paths {
         let is_envelope = path.parent().is_some_and(|dir| dir.ends_with("envelopes"));
         let limits = if is_envelope {
