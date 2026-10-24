@@ -1,6 +1,6 @@
 # Live widgets spec v0
 
-As of 2026-10-24, revision v0.16. This repository copy leads the original design doc and is the
+As of 2026-10-24, revision v0.17. This repository copy leads the original design doc and is the
 source of truth for implementation. v0.1 adds the Implementation clarifications section at the end,
 v0.2 settles the defaults, required properties and paint values that section left open, v0.3
 settles the expression edge cases it left open, v0.4 and v0.5 settle the resolver's, v0.6 the
@@ -8,7 +8,8 @@ reference layout's, v0.7 the SVG fonts, v0.8 bounds the resolved tree's size, v0
 release artifacts, v0.10 makes each Android library export only the C API, v0.11 says whose
 direction `env.rtl` follows, v0.12 lets slid `scroll_x` content draw past the strip, v0.13 takes
 `env.rtl` from the widget's own text instead, v0.14 says what previews show without a summary,
-v0.15 adds keyframe and transition animation, and v0.16 settles three of its details.
+v0.15 adds keyframe and transition animation, v0.16 settles three of its details, and v0.17 lets a
+`use`'s placement transition and orders repeated entries.
 
 ## Overview
 
@@ -1068,6 +1069,8 @@ Properties:
   integer and no value has more digits than it; otherwise the entry is dropped. Layout measures
   the resolved text, so no frame needs a new layout.
 - A `use` animates only `opacity` and the transforms, applied to each shape it draws.
+- When a node has more than one entry for a property, the last in `animations` applies. A `use`'s
+  entries come before each shape's own, so a symbol shape's own entry replaces its `use`'s.
 - Width, padding, gap, text content, path data and every other property stay still, since
   animating them would need a layout or a new path each frame. A literal `property` the node's
   type cannot animate fails the load with `TWIDGET_ERROR_SCHEMA`.
@@ -1079,6 +1082,8 @@ Transitions:
   old to new; a flow node or frame whose box moved draws offset from its old place, easing to
   none, while a size change applies at once; added nodes enter and removed nodes exit; and changed
   text changes in the node's text style.
+- A shape's `transform` also moves from old to new, member by member, so a `use` that moves or
+  resizes glides; a `use` only translates and scales, so this is exact.
 - The template's `transition` is the default for every node, and a node's own `transition`
   replaces it for that node alone; `"none"` turns it off. Without a template `transition`, only
   nodes that ask transition.

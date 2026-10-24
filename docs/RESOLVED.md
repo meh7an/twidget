@@ -143,8 +143,9 @@ written out, so an app interpolates without reading the template.
 
 `transitions` and `animations` follow the tree's order, a node before its children, and a node's
 entries keep the template's order. Keys are the node keys of the tree, so a `repeat` gives each
-item its own entries, a `use`'s entries repeat for each shape it draws, and an invisible node has
-none.
+item its own entries, a `use`'s entries repeat for each shape it draws, ahead of the shape's own,
+and an invisible node has none. When a key has more than one entry for a property, the last one
+applies.
 
 ### Transitions
 
@@ -155,6 +156,9 @@ none.
 | `enter`    | `"fade"` or `"none"`, for nodes the new tree adds                        |
 | `exit`     | `"fade"` or `"none"`, for nodes the new tree removes                     |
 | `text`     | `"crossfade"`, `"roll_up"`, `"roll_down"`, `"count"` or `"none"`         |
+
+Between two trees a shape's `transform` transitions too, member by member, so a symbol that a
+`use` moves or resizes glides.
 
 ### Animations
 
