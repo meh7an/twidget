@@ -222,4 +222,6 @@ on, show the resting tree and skip transitions. To test an interpolator, compare
 
 ## License
 
-None yet: the crate is `publish = false` until the team decides.
+twidget is licensed under the [Mozilla Public License 2.0](LICENSE). Any app may ship it, GPL apps
+included; whoever distributes changed copies of its files must publish those changes under the
+same license.
