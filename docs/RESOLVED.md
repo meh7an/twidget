@@ -7,15 +7,16 @@ expression, apply a default, or see a node type beyond the thirteen below.
 ## Document
 
 ```json
-{"tgw_resolved": 1, "width": "fill", "root": {"type": "column", "key": "0", ...}, "motion": null}
+{"tgw_resolved": 1, "width": "fill", "root": {...}, "motion": null, "interaction": null}
 ```
 
-| Field          | Value                                                                           |
-| -------------- | ------------------------------------------------------------------------------- |
-| `tgw_resolved` | `1`, the format number `TWIDGET_RESOLVED_FORMAT` names                          |
-| `width`        | `"fill"` for the bubble's content width, or a preferred width in units          |
-| `root`         | The root node, or `null` when it resolves to nothing, as an invisible root does |
-| `motion`       | `null` when nothing moves, or the animations and transitions under *Motion*     |
+| Field          | Value                                                                             |
+| -------------- | --------------------------------------------------------------------------------- |
+| `tgw_resolved` | `1`, the format number `TWIDGET_RESOLVED_FORMAT` names                            |
+| `width`        | `"fill"` for the bubble's content width, or a preferred width in units            |
+| `root`         | The root node, or `null` when it resolves to nothing, as an invisible root does   |
+| `motion`       | `null` when nothing moves, or the animations and transitions under *Motion*       |
+| `interaction`  | `null` when nothing is interactive, or the targets and styles under *Interaction* |
 
 The JSON is compact UTF-8 with members in the order this document gives and numbers in their
 shortest round-trip form. Identical bytes mean an unchanged tree, so the app can skip layout.
@@ -189,3 +190,97 @@ Every `value` is written, the crate filling a missing one with the node's own va
 
 A `dash` entry needs a pair at every keyframe, so the crate drops one whose node has no dash and
 whose keyframes leave a value out.
+
+## Interaction
+
+`interaction` is `null` when the tree has no target. Otherwise it says what each target does now
+and how nodes look while it is used, as the spec's *Interactivity (v1.0)* describes, so an app
+hit-tests, runs gestures and paints states without reading the template.
+
+```json
+"interaction": {"targets": [{"key": "0/1/3:wP5", "role": "button", ...}], "styles": []}
+```
+
+| Field     | Value                                                                  |
+| --------- | ---------------------------------------------------------------------- |
+| `targets` | Each target, in tree order, a node before its children                 |
+| `styles`  | Each node with state styles, in tree order, with the target it follows |
+
+### Targets
+
+| Member     | Value                                                                  |
+| ---------- | ---------------------------------------------------------------------- |
+| `key`      | A node's key, or a `use`'s, covering every shape it draws              |
+| `role`     | `button`, `link` or `text_field`, as a screen reader announces it      |
+| `label`    | The screen-reader label                                                |
+| `disabled` | `true` when no gesture would run                                       |
+| `tap`      | Whether a tap would run anything                                       |
+| `drag`     | Whether a drag would start, or `null` when the node is not `draggable` |
+| `drop`     | Whether a drop would run, or `null` when the node has no `drop`        |
+| `input`    | `{"max_length": …}` for a `text_field` with `on_submit`, else `null`   |
+| `link`     | The URL a tap opens, or `null`                                         |
+
+- A key that names no node is a `use`'s: its target covers the shapes whose keys start with it and
+  a `/`.
+- A tap goes to the topmost target under the point whose `tap` is `true`, a drag starts from the
+  topmost whose `drag` is `true`, and a drop goes to the topmost whose `drop` is `true`, hit-tested
+  over resolved geometry with strips' slides and containers' clips. A tap on a `link` opens it,
+  and a tap on an `input` opens the text sheet.
+- During a drag the tree resolves from the drag's scratch view, so `drop` says which targets
+  accept the dragged source.
+
+Accessibility:
+
+- Each target is one screen-reader element, in the order `targets` lists them, with its `role`
+  and `label`. One whose `tap` is `false` is announced as disabled, and one whose only gesture is
+  `drop` is exposed only while `drop` is `true`.
+- Keyboard focus moves through the same elements in the same order, Enter and Space act as a tap,
+  and activating an element acts as a tap.
+
+### Styles
+
+| Member     | Value                                            |
+| ---------- | ------------------------------------------------ |
+| `key`      | The styled node's key                            |
+| `target`   | The key of the target whose state it follows     |
+| `pressed`  | The properties it takes while pressed, or `null` |
+| `hovered`  | The same while hovered                           |
+| `focused`  | The same while focused                           |
+| `disabled` | The same while disabled                          |
+
+Each style maps property names to values written as *Motion*'s animation values are, and a
+`use`'s styles appear once for each shape it draws. States that hold together apply in the order
+`hovered`, `focused`, `pressed`, `disabled`, a later one winning per property, and a change eases
+with the node's transition from `motion`.
+
+### Dispatch results
+
+`twidget_dispatch_result` writes the last dispatch's result:
+
+```json
+{"tgw_dispatch": 1, "ran": [{"action": "move", "result": "applied"}, {"action": "unpick", "result": "applied"}], "send": {"pending": 1, "via": "callback", "data": "move:[\"wP5\",4,4]", "label": null, "payload": null}}
+```
+
+| Field          | Value                                                             |
+| -------------- | ----------------------------------------------------------------- |
+| `tgw_dispatch` | `1`                                                               |
+| `ran`          | Each trigger of the gesture, in order, with its action and result |
+| `send`         | `null`, or what the app sends for the shared action that applied  |
+
+A result is `applied`; `arguments`, when they did not fit; `guard`; `unavailable`, when no button
+matches, action messages are off, there is no viewer or 32 actions are pending; or `failed`, when
+an operation failed or a budget ran out.
+
+| Member    | Value                                                    |
+| --------- | -------------------------------------------------------- |
+| `pending` | The number to pass `twidget_pending_drop`                |
+| `via`     | `callback` or `message`                                  |
+| `data`    | The button data to send, or `null` for a message         |
+| `label`   | The text before the code block, or `null` for a callback |
+| `payload` | The code block's text, or `null` for a callback          |
+
+### Buttons
+
+`twidget_instance_set_buttons` reads a JSON array of strings: the callback data of the message's
+buttons, in keyboard order. Buttons of other kinds, and data that is not UTF-8, are left out, and
+a message without buttons passes `[]`.

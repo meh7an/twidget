@@ -1,6 +1,6 @@
-# Live widgets spec v0
+# Live widgets spec v1
 
-As of 2026-10-24, revision v0.17. This repository copy leads the original design doc and is the
+As of 2026-10-25, revision v1.0. This repository copy leads the original design doc and is the
 source of truth for implementation. v0.1 adds the Implementation clarifications section at the end,
 v0.2 settles the defaults, required properties and paint values that section left open, v0.3
 settles the expression edge cases it left open, v0.4 and v0.5 settle the resolver's, v0.6 the
@@ -8,8 +8,9 @@ reference layout's, v0.7 the SVG fonts, v0.8 bounds the resolved tree's size, v0
 release artifacts, v0.10 makes each Android library export only the C API, v0.11 says whose
 direction `env.rtl` follows, v0.12 lets slid `scroll_x` content draw past the strip, v0.13 takes
 `env.rtl` from the widget's own text instead, v0.14 says what previews show without a summary,
-v0.15 adds keyframe and transition animation, v0.16 settles three of its details, and v0.17 lets a
-`use`'s placement transition and orders repeated entries.
+v0.15 adds keyframe and transition animation, v0.16 settles three of its details, v0.17 lets a
+`use`'s placement transition and orders repeated entries, and v1.0 adds interactivity: actions,
+triggers, state styles and sync through a bot.
 
 ## Overview
 
@@ -19,7 +20,7 @@ declarative documents that every client renders natively inside a message bubble
 chat's theme and layout.
 
 v0 is render-first. Widgets display their state, follow the theme and layout direction, and tick
-locally (the clock). Shared interactivity is reserved in the format and lands in v1.
+locally (the clock). Shared interactivity lands in v1, under *Interactivity (v1.0)*.
 
 Out of scope for v0:
 
@@ -55,8 +56,9 @@ resolves again then while the widget is visible.
 
 Source seam: clients read widgets through one interface with four verbs: resolve template, get
 state, subscribe to changes, and send action. v0 implements it over plain-text messages and leaves
-send action empty. The MTProto implementation replaces it in v2 without touching the crate or the
-renderers.
+send action empty; v1 sends actions through the message's buttons and replies, to a bot that
+edits the message. The MTProto implementation replaces it in v2 without touching the crate or
+the renderers.
 
 The crate copies tlottie's house style: zero default dependencies, clippy denying panicking
 constructs, opaque handles, pointer-plus-length inputs, status codes, and caller-provided output
@@ -111,7 +113,8 @@ Envelope fields:
 | `template`      | object  | one of the two | Inline template                                                                     |
 | `template_ref`  | object  | one of the two | `{"id": "tg.chess", "version": 1}`, looked up by the client among bundled templates |
 | `state`         | object  | no             | The widget's data, `{}` when absent                                                 |
-| `state_version` | integer | no             | Monotonic version, informational in v0 and used for sync in v1                      |
+| `state_version` | integer | no             | Monotonic version, which v1's bot raises by one with every edit                     |
+| `acks`          | list    | no             | The actions the bot processed since its previous edit, in v1                        |
 
 Template fields:
 
@@ -125,6 +128,9 @@ Template fields:
 | `tick`    | string           | no       | `second` (default) or `minute`, the clock granularity when the tree reads `env.now` |
 | `width`   | string or number | no       | `fill` (default) or a preferred width in units                                      |
 | `defs`    | object           | no       | `symbols`: named vector drawings reused through `use` nodes                         |
+| `actions` | object           | no       | Actions by name, in the order the keyboard lists them, in v1                        |
+| `roles`   | object           | no       | Named boolean expressions over `state` and `actor`, in v1                           |
+| `view`    | object           | no       | The view a viewer starts from, `{}` when absent, in v1                              |
 
 Environment, read-only inside expressions:
 
@@ -134,6 +140,7 @@ Environment, read-only inside expressions:
 | `env.tz_offset` | Viewer's current UTC offset in minutes            |
 | `env.dark`      | `true` when the theme is dark                     |
 | `env.rtl`       | `true` when the layout direction is right to left |
+| `env.viewer`    | The viewer's `{id, name}`, or `null`, in v1       |
 
 Values: every property takes either a literal JSON value or an expression written as
 `{"=": "<expression>"}`. Inside a `repeat`, the current item and index are in scope under the
@@ -164,7 +171,7 @@ Flow leaves:
 | Type         | Key properties                                                                     | Notes                                                                               |
 | ------------ | ---------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
 | `text`       | `text`, `entities`, `style`, `color`, `align`, `max_lines`, `tabular`              | `entities` use Bot API `MessageEntity` offsets; `tabular` forces fixed-width digits |
-| `text_field` | `label`, `value`, `placeholder`, `lines`                                           | Display-only in v0: an input-styled box, editing arrives in v1                      |
+| `text_field` | `label`, `value`, `placeholder`, `lines`                                           | An input-styled box, edited in v1 through a native sheet                            |
 | `chart`      | `kind` (`line` or `bar`), `labels`, `series`, `y_min`, `y_max`, `height`, `legend` | Each series has `name`, `values` and `color`                                        |
 | `divider`    | `color`                                                                            | One device pixel across the full width                                              |
 
@@ -186,7 +193,8 @@ Box properties: `padding` is a number, `[vertical, horizontal]` or `[top, end, b
 `align` is `start`, `center`, `end` or `stretch` on the cross axis, and `border` is
 `{"color": …, "width": …}`.
 
-Reserved for v1 and ignored by v0: `on_tap`, `draggable`, `drop`, `actions`, `roles`, `reducers`.
+v1 gives `on_tap`, `draggable`, `drop`, `actions` and `roles` their meaning under *Interactivity
+(v1.0)*, and `reducers` stays reserved.
 
 ## Expressions
 
@@ -370,7 +378,8 @@ Rules:
 - A caught panic returns `TWIDGET_ERROR_INTERNAL` and sets the last error, so a widget bug never
   crashes an app built with unwinding.
 
-Reserved for v1: action dispatch, patches and acknowledgements.
+v1 adds dispatch, buttons, edits with acknowledgements and the view, under *Interactivity
+(v1.0)*; patches stay reserved for v2.
 
 ## Client integration
 
@@ -684,9 +693,9 @@ Names reserved now keep every v0 envelope valid later.
 | v1    | Actions, reducers in the crate, drag and drop, text editing through native sheets, roles and guards | Plain text plus a stand-in bot that applies actions and edits the message |
 | v2    | Widget ids, a template cache keyed by hash, pushed state patches, server-side reducers              | MTProto                                                                   |
 
-Reserved names: node properties `on_tap`, `draggable` and `drop`; template fields `actions`,
-`roles` and `reducers`; envelope fields `acks` and `actor`; and the code block language
-`tgw-action`.
+v1 gives reserved names their meaning: the node properties `on_tap`, `draggable` and `drop`, the
+template fields `actions` and `roles`, the envelope field `acks` and the code block language
+`tgw-action`. The template field `reducers` and the envelope field `actor` stay reserved.
 
 ## Decisions log
 
@@ -1140,3 +1149,473 @@ Conformance gains a fourth layer, sampled values:
   floating reactions and a rolling clock digit. The goldens become 36 resolved trees, 27 frame
   files and 9 RTL frame files, plus its sampled values under `fixtures/expected/sampled/`.
 - Transitions have no goldens: these rules are their reference, checked in the Widget Lab.
+
+## Interactivity (v1.0)
+
+v1 makes widgets interactive. A tap, a drag or a text field's submit runs actions the template
+declares. A local action changes the viewer's own `view`, which stays on the device. A shared
+action changes `state`: the app applies it at once and sends it to a bot, which applies it again
+as the authority and writes the result back by editing the message. Both run the crate's
+reducers, so the app's optimistic result and the bot's answer agree.
+
+Interactive templates keep `spec` 1. A crate without v1 ignores the new names, as it does unknown
+properties, and shows the widget as v0 does, with the bot's buttons under the message.
+
+### Template members
+
+| Field     | Type   | Meaning                                                         |
+| --------- | ------ | --------------------------------------------------------------- |
+| `actions` | object | The actions by name, in the order the bot's keyboard lists them |
+| `roles`   | object | Named boolean expressions over `state` and `actor`              |
+| `view`    | object | The view a viewer starts from, `{}` when absent                 |
+
+- Action and role names are 1 to 32 bytes of `a-z`, `0-9` and `_`, starting with a letter.
+- `view` is plain data, never evaluated, as `state` is.
+- The template field `reducers` and the envelope field `actor` stay reserved, and v1 ignores
+  them. The bot learns who acted from Telegram, so no payload names an actor that could be forged.
+
+### Actions
+
+A one-vote-per-user poll:
+
+```json
+"actions": {
+  "vote": {
+    "scope": "state",
+    "args": { "option": "int" },
+    "let": { "me": "string(actor.id)", "old": "state.votes[me]" },
+    "guard": "args.option >= 0 && args.option < len(state.options) && old != args.option",
+    "ops": [
+      { "inc": "state.tally[old]", "by": "-1", "when": "old != null" },
+      { "inc": "state.tally[args.option]" },
+      { "set": "state.votes[me]", "to": "args.option" }
+    ],
+    "outcomes": "[{args: {option: i}, label: state.options[i]} for i in range(len(state.options))]"
+  }
+}
+```
+
+| Member     | Type                 | Required | Meaning                                             |
+| ---------- | -------------------- | -------- | --------------------------------------------------- |
+| `scope`    | string               | yes      | `view` for a local action, `state` for a shared one |
+| `args`     | object               | no       | The arguments in order, each name with its type     |
+| `let`      | object               | no       | Named values, in order                              |
+| `guard`    | expression           | no       | The action applies only when it yields `true`       |
+| `ops`      | list                 | yes      | The update operations, in order                     |
+| `outcomes` | expression or object | no       | Every outcome a button may offer now                |
+| `label`    | expression           | no       | The text of an action message                       |
+
+- Every string value in an action, except `scope` and the argument types, is an expression,
+  written without `{"=": …}`. A literal string is written as an expression, such as `'done'`.
+- `args` lists at most 8 arguments, each name, which follows the action-name rule, with its type:
+  `int`, a whole number from −9,007,199,254,740,991 to 9,007,199,254,740,991; `number`; `string`;
+  or `bool`. Inside the action, `args` is a map from each name to its value.
+- `let` holds at most 8 named values, evaluated once, in order, each reading the ones before it.
+  Their names follow the action-name rule and are never a root name: `state`, `env`, `view`,
+  `args`, `actor` or `roles`.
+- A local action writes `view` and may read everything an action reads. A shared action writes
+  `state`, never reads `view`, and reads only `env.now` of the environment, since the bot has no
+  view, theme or direction; the load refuses one that does. Only shared actions declare
+  `outcomes` or `label`.
+- Applying an action checks its arguments, evaluates its named values and its guard, then runs its
+  operations. The action is rejected, and nothing changes, when an argument is missing, extra or
+  of the wrong type, the guard yields anything but `true`, an operation fails, the fuel runs out,
+  or the new document passes its budget: 64 KB and nesting 64 for `state`, 4 KB for `view`.
+- An action has its own fuel, 200,000 steps from its first named value to its last write. In
+  actions, roles and outcomes, reading `state` or `view` whole costs a step per value it holds.
+
+### Expressions
+
+| Name           | Value                                     | Read in                                        |
+| -------------- | ----------------------------------------- | ---------------------------------------------- |
+| `view`         | The viewer's view                         | The tree, local actions                        |
+| `args`         | The arguments of the action being applied | Actions                                        |
+| `actor`        | `{id, name}` of who acts                  | Actions, roles                                 |
+| `roles.<name>` | Whether the role holds                    | The tree for the viewer, actions for the actor |
+| `env.viewer`   | `{id, name}` of the viewer, or `null`     | The tree, local actions                        |
+| Named values   | The values of `let`                       | Their action, or their outcomes                |
+
+- Map literals, `{key: value, …}`: each key a name or a string, used once, and kept in order. A
+  map costs a fuel step per member.
+- One comprehension, `[element for name in list if condition …]`: a `for`, then any number of
+  `for` and `if` clauses, each binding or filtering for the ones after it, and `for name in
+  [value]` binds a single value. A `for` over anything but a list makes the whole comprehension
+  `null`, and an `if` keeps the bindings for which it yields `true`. Each clause holds the rest
+  one nesting level deeper, a comprehension yields at most 1,000 items, and each item costs a fuel
+  step. Inside a list, a `for` at the list's own level starts a comprehension.
+- `index_of(list, value)` is the first position whose item equals `value`, as `==` compares, or
+  −1, and `null` when `list` is not a list. `has(map, key)` is whether the map has a member `key`,
+  and `null` unless given a map and a string.
+- `roles.<name>` yields `true` only when the role's expression does. A role reads `state`,
+  `actor` and `env.now`, never `view`, `args`, named values or another role. An unknown role name
+  fails the load, and `roles` is read only as `roles.<name>`.
+- A comprehension or a named value never binds `view`, `args`, `actor` or `roles`, and in a
+  template that declares `actions` neither does a `repeat`, as no template binds `state` or `env`.
+  In a template without `actions`, a `repeat` may still bind them, as in v0.
+
+### Update operations
+
+| Operation | Form                                            | Effect                                                   |
+| --------- | ----------------------------------------------- | -------------------------------------------------------- |
+| `set`     | `{"set": place, "to": value}`                   | Writes the value, adding a missing map member at the end |
+| `add`     | `{"add": list, "value": value, "at": position}` | Inserts the value before `at`, or at the end without it  |
+| `remove`  | `{"remove": place}`                             | Removes a list item or a map member                      |
+| `move`    | `{"move": item, "into": list, "at": position}`  | Moves a list item into a list, before `at` or to its end |
+| `inc`     | `{"inc": place, "by": number}`                  | Adds `by`, 1 when absent                                 |
+| `toggle`  | `{"toggle": place}`                             | Negates a boolean                                        |
+
+- Any operation may carry `when`, and then runs only when it yields `true`.
+- A place is `state` in a shared action, or `view` in a local one, followed by `.name` and
+  `[key]` steps. A string key steps into a map member and a whole number from 0 into a list item,
+  so a negative or fractional number names nothing. The load refuses any other expression where a
+  place belongs.
+- `set` on the bare document replaces it, and the value must be a map; `remove` needs a step.
+- Every expression of the action, the places' keys included, reads the documents as they stood
+  before the action. The operations write a working copy in order, so after a `remove` from a
+  list, a later write to a position in it lands on the item that shifted there.
+- `move` counts `at` in the destination as it stood before the action, and adjusts it when the
+  item moves within one list.
+- An operation fails when its place is missing, other than the member `set` adds, or holds the
+  wrong type: `add` and `move` need a list, `inc` a number and `toggle` a boolean. It also fails
+  when `at` lies outside 0 to the list's length, `by` is not a number, or a sum is not finite.
+- The working copy costs a step per value of the document, and `add`, `remove` and `move` cost a
+  step per item they shift.
+
+### Outcomes and the keyboard
+
+- `outcomes` is an expression, or `{"let": {…}, "list": "…"}` with named values of its own, that
+  yields a list of `{args, label}` maps: one button's arguments, as a map by name, and its text.
+- Outcomes read `state`, `env.now` and their own named values. The load refuses outcomes that read
+  `view`, `args`, `actor`, `roles` or the action's named values, since every member of the chat
+  sees the same keyboard. The outcomes say what the state allows, and the guard says who may act.
+- After every edit, the bot builds the message's keyboard from the new state: for each shared
+  action with `outcomes`, in the template's order, a callback button per outcome, with the
+  outcome's payload as its data and its label as its text. It skips an outcome whose arguments do
+  not fit, whose payload passes 64 bytes or whose payload an earlier button carries, and stops at
+  100 buttons, counting its own buttons first. An outcome past the cut has no button, so no
+  trigger with its payload would run.
+- A label is 1 to 64 characters. One that is empty or not a string becomes the payload, and a
+  longer one is cut to 63 characters and `…`.
+- Listing one keyboard's outcomes has its own 200,000 steps. The rows the buttons sit in are the
+  bot's choice.
+
+### Payloads
+
+- A shared action travels as its payload: the action's name when it declares no arguments, else
+  the name, `:` and its arguments as a compact JSON array in declared order, written as the
+  resolved tree writes JSON: RFC 8785's numbers, and strings that escape only `"`, `\` and U+0000
+  to U+001F, with JSON's two-character escapes where it has them and lowercase hex otherwise. So
+  `unvote`, `vote:[1]` and `move:["wP5",4,4]`.
+- The encoding is canonical, so the app and the bot write the same bytes. A reader splits the
+  payload at its first `:`, parses the rest, checks it against the declaration, and refuses a
+  payload that does not write back to the same bytes.
+- A shared action with `outcomes` travels as callback data, the data of a button on the widget's
+  own message, at most 64 bytes.
+- A shared action without `outcomes` travels as an action message: a text message that replies to
+  the widget message, holding the action's `label`, or its name without one, a line break, and a
+  code block whose language is `tgw-action` and whose text is the payload. The whole message fits
+  4,096 UTF-16 units, and `label` reads what the action's guard reads.
+- Payloads name no actor: the bot takes it from the sender of the callback or the message.
+
+### Triggers
+
+| Property    | Value                     | Runs on                                             |
+| ----------- | ------------------------- | --------------------------------------------------- |
+| `on_tap`    | Triggers                  | A tap                                               |
+| `draggable` | Triggers of local actions | The start of a drag, or a tap that picks            |
+| `drop`      | Triggers                  | A drag released over the node, or a tap that places |
+| `on_submit` | One trigger with `input`  | Submitting a `text_field`'s sheet                   |
+| `link`      | A URL                     | A tap, which opens it                               |
+
+- Every node but `repeat` and `connector` may carry `on_tap`, `draggable`, `drop` and `link`, and
+  a `text_field` may carry `on_submit`. Shapes in `defs.symbols` carry none; their `use` does, as
+  one target under the `use`'s key that covers every shape it draws. Invisible nodes have none.
+- A trigger is `{"action": name, "args": {name: value}}`, with `args` left out for an action that
+  takes none. Each value is a literal or `{"=": …}`, evaluated with the tree, so a trigger's
+  arguments are fixed when the tree resolves, and may read `view`, a `repeat`'s item and
+  everything else the tree reads.
+- A trigger property holds one trigger or a list of up to 4, with at most one shared action. The
+  triggers run in order, each reading the state and view as they stood before the gesture, and
+  one that is rejected is skipped while the rest still run.
+- A trigger would run when its action exists, its arguments fit, and its guard yields `true` for
+  the viewer on the shown state and view. A shared one also needs the viewer set, fewer than 32
+  actions pending, and a button with its payload or, without `outcomes`, action messages
+  available. A list would run when its first trigger would, the rest riding along. Operations are
+  not tried ahead, so a trigger that would run can still fail.
+- A gesture would run on a node when its trigger list would. A target is disabled when none of its
+  gestures would run.
+- `link` keeps a URL that starts with `http://`, `https://` or `tg://`, in any case, within 2 KB;
+  any other value drops it. The app opens it as it opens a `text_link` entity in a message, with
+  the same confirmation.
+- A node with `link` carries no other trigger, a node with `draggable` no `on_tap`, so every drag
+  keeps its tap-to-pick alternative, and a `text_field` with `on_submit` no `on_tap`, `draggable`
+  or `link`. A template that breaks one of these fails the load with `TWIDGET_ERROR_SCHEMA`, and
+  so does a shared action in `draggable` or a trigger that names an unknown action or argument.
+- A `text`'s entities that a message makes tappable, `url`, `text_link`, `mention`,
+  `text_mention`, `hashtag`, `cashtag`, `email` and `phone_number`, act as they do in a message,
+  through the app's own handling, and a tap inside one goes to it first. `bot_command` stays
+  styling only, since a tap would send a message.
+
+Tabs, a local action and its trigger on each tab of a `repeat`:
+
+```json
+"actions": {
+  "select": {
+    "scope": "view",
+    "args": { "tab": "int" },
+    "ops": [{ "set": "view.tab", "to": "args.tab" }]
+  }
+}
+```
+
+```json
+"on_tap": { "action": "select", "args": { "tab": { "=": "index" } } },
+"states": { "pressed": { "opacity": 0.6 } }
+```
+
+Gestures:
+
+- Taps act on release, at the topmost target under the finger whose tap would run, which runs the
+  first of its `on_tap`, `draggable` and `drop` that would run. A target lower in paint order is
+  tried when the ones above it would run nothing, so a tap on an opponent's piece reaches the
+  square beneath it. Tap-to-pick is two taps: one picks the source through its `draggable`, and
+  one places it through a target's `drop`.
+- A drag starts from the topmost target under the finger whose `draggable` would run, after a rest
+  of about 150 ms. The crate runs those triggers on a scratch copy of the view and resolves from it
+  for the rest of the drag, so the tree shows which drops would run. Releasing over a target whose
+  `drop` would run runs it on the scratch view and keeps the result; releasing anywhere else, or a
+  cancel, throws the scratch view away.
+- The app draws an opaque, lifted copy of the source in an overlay above the chat list, so the
+  copy can leave the bubble.
+- Long press stays the message menu, and nothing runs while the chat selects messages. After a
+  gesture that runs anything, the app resolves again.
+- Hit-testing walks the boxes of flow nodes, frames and canvases and the bounds of shapes through
+  their `transform`, shifts what a `scroll_x` has slid, and clips by every container as painting
+  does, a strip's bleed included. It ignores state styles, transitions and keyframe animations.
+- Tab and the arrow keys move keyboard focus through the targets in tree order, Enter and Space
+  act as a tap, and focus leaves the widget at either end. A mouse shows the hand cursor over a
+  target whose tap would run.
+
+Chess, picked by drag or by tap. Each piece is a `use` in the pieces' `repeat`, bound as `p`, and
+each square a `rect` in the squares' `repeat`, bound as `i`; `move` is a shared action:
+
+```json
+"actions": {
+  "pick": {
+    "scope": "view",
+    "args": { "piece": "string" },
+    "let": { "mine": "[p.id for p in state.pieces if p.side == state.turn]" },
+    "guard": "roles.to_move && index_of(mine, args.piece) >= 0",
+    "ops": [{ "set": "view.picked", "to": "args.piece" }]
+  },
+  "unpick": { "scope": "view", "ops": [{ "set": "view.picked", "to": "null" }] }
+},
+"roles": { "to_move": "state.players[state.turn] == actor.id" }
+```
+
+```json
+"draggable": { "action": "pick", "args": { "piece": { "=": "p.id" } } }
+```
+
+```json
+"drop": [
+  {
+    "action": "move",
+    "args": {
+      "piece": { "=": "view.picked" },
+      "x": { "=": "i % 8" },
+      "y": { "=": "floor(i / 8)" }
+    }
+  },
+  { "action": "unpick" }
+]
+```
+
+While nothing is picked, `view.picked` is `null`, which a `string` argument never takes, so no
+square's drop would run. Once a piece is picked, the squares whose move has a button would.
+
+Text input:
+
+- A tap on a `text_field` with `on_submit` opens the app's native text sheet: the field's `label`
+  as its title, its `placeholder` as hint, its `value` as the starting text, several lines when
+  `lines` is above 1, and at most `max_length` characters, from 1 to 4,096 and 256 by default.
+- `on_submit` is one trigger whose `input` names a `string` argument of its action that `args`
+  leaves out. Submitting fills that argument with the text and runs the trigger, and cancelling
+  runs nothing. A shared action there declares no `outcomes`, since text cannot be listed.
+
+### State styles
+
+- Every node but `repeat` and `connector` may carry `states`, `{"pressed": {…}, "hovered": {…},
+  "focused": {…}, "disabled": {…}}`, each a map of properties the node may animate under
+  *Animation*, with literal or `{"=": …}` values resolved with the tree. A literal property the
+  node cannot animate fails the load with `TWIDGET_ERROR_SCHEMA`, and a value an expression
+  produces that the property cannot take drops it from the style.
+- A node's styles follow the nearest target at or above it, so a card's title can change color
+  while the card is pressed. A node with no target at or above it ignores its `states`.
+- `pressed` holds from the tap timeout until release or cancel, flashes briefly on a quicker tap,
+  and holds on a drag's source for the whole drag. `hovered` holds while a mouse is over a target
+  whose tap would run, or a dragged copy is over a target whose drop would run. `focused` follows
+  keyboard focus, and `disabled` holds while no gesture of the target would run.
+- States that hold together apply in the order hovered, focused, pressed, disabled, a later one
+  winning per property.
+- A state change eases with the node's transition, its own or the template's, and is immediate
+  without one or under reduced motion. A running keyframe animation of the same property still
+  wins. States never change layout.
+
+### Identity
+
+- The viewer is the account the app shows the chat to, as `{id, name}`: its Telegram user id, and
+  its first name, a space and its last name when it has one. The app sets it on the instance once;
+  the Widget Lab and other places without an account leave it `null`, and then no shared trigger
+  would run.
+- The tree reads the viewer as `env.viewer`, and roles for the viewer as `roles.<name>`. When the
+  app applies an action, `actor` is the viewer; when the bot does, `actor` is the sender Telegram
+  names, with the same members. A name the app knows differently is corrected by the bot's edit.
+
+### Sync
+
+- The instance holds the bot's state from the latest envelope and its `state_version`, the view,
+  the pending shared actions and the message's buttons. The tree resolves from the shown state:
+  the bot's state with each pending action applied again, in order.
+- A shared action that applies is held as pending with its payload and the `env.now` it was sent
+  at, and the crate hands the payload to the app, which sends it.
+- A callback goes out as `messages.getBotCallbackAnswer` with the matching button's data. An error
+  from the server, such as `DATA_INVALID` or a flood wait, drops the action at once. An answer
+  without text leaves it pending, and an answer with text means the bot rejected it: the app shows
+  the text as it shows any answer, and drops the action.
+- An action message goes out as a reply to the widget message, and a failed send drops the action.
+- With every edit, the bot raises `state_version` by one and lists in the envelope's `acks` each
+  shared action it processed since its previous edit, applied or rejected, as `[user_id,
+  payload]`, in the order it processed them, at most 100.
+- On an edit, the app hands the new envelope to the instance:
+  - Without `state_version`, it replaces the state as in v0 and drops every pending action.
+  - With one no higher than the current one, it is stale and changes nothing.
+  - With one higher by more than one, or without `acks`, it replaces the state and drops every
+    pending action, since the app cannot tell what the bot applied.
+  - Otherwise each ack that names the viewer drops the oldest pending action with its payload, and
+    the remaining ones apply again on the new state, in order; one rejected there is dropped.
+- A pending action that no ack names within 120 s of being sent is dropped. Pending actions live in
+  memory only, and an edit keeps the view.
+- The bot handles actions in the order they arrive. It decodes the payload, checks a callback's
+  payload against the outcomes of its current state, and applies the action for the sender. It
+  answers a callback at once, with no text when it applied the action and with the reason when it
+  rejected it, so a bot never shows a notice on success. It edits the message with the new state,
+  `state_version`, `acks` and keyboard, batching actions within Telegram's edit limits, and
+  deletes action messages where it may.
+
+### View persistence
+
+- The app stores the view after every change, under the account, chat id and message id as the
+  app knows them, with the template's id and version, and gives it back when it builds the
+  instance again.
+- A view stored under another template id or version is discarded, and so is one that is not a
+  map within 4 KB; the instance then starts from the template's `view`. Every message, a
+  forwarded copy included, has its own view.
+
+### Where actions work
+
+- Local actions work in every widget message.
+- Callbacks work in a message that a bot sent, or that was sent through a bot in inline mode, and
+  that is not a forward. The app passes that message's buttons to the instance; a forward, a
+  message a person sent and a message without buttons pass none, so no callback trigger would run.
+- Action messages work where the app can send a reply that the widget's bot reads: a private chat
+  with that bot, and a group the bot is a member of. Inline-mode messages in chats without the
+  bot, channels and forwards have none. The app tells the instance whether they are available.
+
+### Fallback
+
+- A v0 client shows the widget as before, and the bot's keyboard under it as plain buttons with
+  the outcomes' labels.
+- A v1 app hides each callback button whose data decodes to a shared action of the widget's
+  template, and keeps the bot's other buttons under the widget. It also hides each message that
+  replies to a widget message and whose first `tgw-action` block decodes to one of that widget's
+  actions.
+
+### Accessibility
+
+- Every target is one screen-reader element, in tree order: a button for taps, drags and drops, a
+  link for `link`, and an edit field for a `text_field` with `on_submit`.
+- Its label is the node's `a11y`, else the strings it and its descendants draw, as *Layout
+  direction* lists them, joined by spaces, else its first trigger's action name. Canvas targets
+  should set `a11y`.
+- A target whose tap would not run is announced as disabled. A target whose only gesture is `drop`
+  reaches screen readers and keyboard focus only while its drop would run.
+- Activation acts as a tap, and drags go through tap-to-pick, so a screen reader moves a piece with
+  two activations. A template puts state in the label, such as
+  `{"=": "view.picked == p.id ? 'White pawn, picked' : 'White pawn'"}`.
+
+### Resolved tree and C API
+
+- A top-level `interaction` member follows `motion`: `null` when the tree has no target, else the
+  targets and the state styles, each keyed by node, as `docs/RESOLVED.md` details. The format
+  stays 1.
+- ABI 1 grows by these functions, and `TWidgetEnv` is unchanged:
+
+| Function                       | Purpose                                                                  |
+| ------------------------------ | ------------------------------------------------------------------------ |
+| `twidget_instance_set_viewer`  | Sets the viewer's id and name, once per instance                         |
+| `twidget_instance_set_buttons` | Passes the message's callback data and whether action messages work      |
+| `twidget_instance_apply_edit`  | Applies an edited envelope: its state, version and acks                  |
+| `twidget_dispatch`             | Runs a gesture on a target: tap, drag start, drop, drag cancel or submit |
+| `twidget_dispatch_result`      | Writes the last dispatch's result: what ran and what to send             |
+| `twidget_pending_drop`         | Drops a pending action after a failed send or a rejecting answer         |
+| `twidget_instance_view`        | Writes the view for the app to store                                     |
+| `twidget_instance_set_view`    | Restores a stored view                                                   |
+
+- `twidget_instance_set_state` stays, and acts as an edit without `acks`.
+- A rejected action is a result, not a failure: a dispatch returns `TWIDGET_OK` and its result
+  says what ran.
+- The Rust API gives the bot the same reducers: the keyboard of a state, and applying a payload
+  for an actor.
+
+### Budgets
+
+| Budget                                | Initial limit                         |
+| ------------------------------------- | ------------------------------------- |
+| Actions per template                  | 64                                    |
+| Roles per template                    | 16                                    |
+| Arguments per action                  | 8                                     |
+| Named values per action or outcomes   | 8                                     |
+| Operations per action                 | 32                                    |
+| Triggers per gesture                  | 4                                     |
+| Fuel per action                       | 200,000 steps                         |
+| Fuel per keyboard                     | 200,000 steps                         |
+| Interaction fuel per resolve          | 200,000 steps                         |
+| Interaction targets per resolved tree | 1,000                                 |
+| Pending actions per instance          | 32                                    |
+| Pending timeout                       | 120 s                                 |
+| `acks` per envelope                   | 100                                   |
+| View                                  | 4 KB                                  |
+| Callback data                         | 1 to 64 bytes                         |
+| Buttons per message                   | 100                                   |
+| Outcome label                         | 1 to 64 characters                    |
+| Action message                        | 4,096 UTF-16 units                    |
+| `link`                                | 2 KB                                  |
+| `max_length`                          | 1 to 4,096 characters, 256 by default |
+
+The interaction fuel pays for the guards and checks that decide what would run. A literal out of
+range fails the load with `TWIDGET_ERROR_BUDGET`. At dispatch, an action that passes a budget is
+rejected and changes nothing. More than 1,000 targets, or running out of interaction fuel, fails
+the resolve with `TWIDGET_ERROR_BUDGET`, and an envelope with more than 100 `acks` fails with it
+too, leaving the instance as it was.
+
+### Action sequences
+
+Conformance gains a fifth layer, action sequences:
+
+- A sequence, `fixtures/sequences/<name>.json`, is `{"tgw_sequence": 1, "envelope": …, "viewer":
+  …, "action_messages": …, "steps": […]}`: an envelope from `fixtures/envelopes/`, the viewer,
+  whether action messages are available, and steps run in order. The reference bot builds the
+  first keyboard from the envelope's state.
+- Steps are `{"tap": key}`; `{"drag": key}` and `{"drop": key}`, with `{"drop": null}` for a
+  cancel; `{"submit": key, "text": …}`; `{"answer": text}` and `{"fail": true}`, for the oldest
+  pending action; `{"bot": [entry, …]}`, where the reference bot processes the oldest payload the
+  app sent, `"sent"`, or another member's, `{"actor": …, "payload": …}`; `{"edit": "seen"}` and
+  `{"edit": "lost"}`, where the bot edits with everything processed since its last edit and the
+  app receives the edit or never does; `{"envelope": …}`, a hand-written edit; and
+  `{"wait": ms}`, which moves the clock.
+- `twidget-cli sequence <file>` writes `{"tgw_sequence_result": 1, "steps": […]}`: for each step,
+  the dispatch result or `null`, the pending payloads, the view, the shown state and the
+  `interaction` member. The results are checked in under `fixtures/expected/sequences/`, and the
+  environment is the fixed test one.
+- The reference bot is the crate's own: the outcomes, guards and operations `twidget-bot` runs.
